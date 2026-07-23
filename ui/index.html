@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>Media Gallery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-neutral-950 text-neutral-100">
+    <div id="app">
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;">
+            <div style="width:32px;height:32px;border:3px solid #333;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.7s linear infinite;"></div>
+        </div>
+    </div>
+    <script src="/js/app.js"></script>
+    <script src="/js/components/ThumbGrid.js"></script>
+    <script src="/js/components/Lightbox.js"></script>
+    <script src="/js/components/Sidebar.js"></script>
+    <script src="/js/views/Gallery.js"></script>
+    <script src="/js/views/Faces.js"></script>
+    <script src="/js/views/Dupes.js"></script>
+    <script src="/js/views/Stats.js"></script>
+    <script src="/js/views/Search.js"></script>
+    <script src="/js/components/AppLayout.js"></script>
+    <script>
+        const { createApp } = Vue;
+        const app = createApp(AppLayout);
+        app.component('thumb-grid', ThumbGrid);
+        app.component('lightbox', Lightbox);
+        app.component('sidebar', Sidebar);
+        app.component('gallery-view', GalleryView);
+        app.component('faces-view', FacesView);
+        app.component('dupes-view', DupesView);
+        app.component('stats-view', StatsView);
+        app.component('search-view', SearchView);
+        app.mount('#app');
+        lucide.createIcons();
+    </script>
+</body>
+</html>
