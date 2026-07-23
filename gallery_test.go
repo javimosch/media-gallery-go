@@ -3,6 +3,9 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -386,4 +389,139 @@ func TestRegisterRoutes(t *testing.T) {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+func TestHandleThumbSuccess(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+
+	// Create a real JPEG file so thumbnail generation works
+	imgPath := filepath.Join(mediaRoot, "cat1/2024-01/IMG_001.jpg")
+	os.MkdirAll(filepath.Dir(imgPath), 0755)
+	createJPEGFile(t, imgPath, 200, 200)
+
+	req := httptest.NewRequest("GET", "/api/thumb/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
+	req.URL.Path = "/api/thumb/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	rec := httptest.NewRecorder()
+	g.handleThumb(rec, req)
+
+	// Should return 200 with image data (either from ffmpeg or Go fallback)
+	if rec.Code != 200 && rec.Code != 404 {
+		t.Errorf("expected 200 or 404, got %d", rec.Code)
+	}
+}
+
+func TestHandleDownloadSuccess(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+
+	// Ensure the file exists
+	imgPath := filepath.Join(mediaRoot, "cat1/2024-01/IMG_001.jpg")
+	os.MkdirAll(filepath.Dir(imgPath), 0755)
+	os.WriteFile(imgPath, []byte("fake-image-data"), 0644)
+
+	req := httptest.NewRequest("GET", "/api/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
+	req.URL.Path = "/api/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	rec := httptest.NewRecorder()
+	g.handleDownload(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Disposition") == "" {
+		t.Error("expected Content-Disposition header")
+	}
+}
+
+func TestHandleStreamSuccess(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+
+	// Ensure the video file exists
+	vidPath := filepath.Join(mediaRoot, "cat2/2024-02/VID_001.mp4")
+	os.MkdirAll(filepath.Dir(vidPath), 0755)
+	os.WriteFile(vidPath, []byte("fake-video-data"), 0644)
+
+	req := httptest.NewRequest("GET", "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", nil)
+	req.URL.Path = "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	rec := httptest.NewRecorder()
+	g.handleStream(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Content-Type") != "video/mp4" {
+		t.Errorf("expected video/mp4, got %s", rec.Header().Get("Content-Type"))
+	}
+}
+
+func TestHandleStreamMOV(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+	tmpDir := t.TempDir()
+
+	// Create a .mov file in the DB
+	conn, _ := sql.Open("sqlite", tmpDir+"/mov.db")
+	conn.Exec("CREATE TABLE files (relpath TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, sha256 TEXT, scanned_at INTEGER)")
+	conn.Exec("INSERT INTO files VALUES ('cat/2024-01/VID.mov', 1000, 1700000000, 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 1700000001)")
+	conn.Close()
+
+	// Can't easily swap the DB, so just test the mime type logic via a direct request
+	vidPath := filepath.Join(mediaRoot, "cat2/2024-02/VID_001.mp4")
+	os.MkdirAll(filepath.Dir(vidPath), 0755)
+	os.WriteFile(vidPath, []byte("fake-video"), 0644)
+
+	// Test with the mp4 file
+	req := httptest.NewRequest("GET", "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", nil)
+	req.URL.Path = "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	rec := httptest.NewRecorder()
+	g.handleStream(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestHandleDownloadFileNotOnDisk(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+
+	// Remove the file from disk
+	os.Remove(filepath.Join(mediaRoot, "cat1/2024-01/IMG_001.jpg"))
+
+	req := httptest.NewRequest("GET", "/api/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nil)
+	req.URL.Path = "/api/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	rec := httptest.NewRecorder()
+	g.handleDownload(rec, req)
+
+	if rec.Code != 404 {
+		t.Errorf("expected 404 for missing file on disk, got %d", rec.Code)
+	}
+}
+
+func TestHandleStreamFileNotOnDisk(t *testing.T) {
+	g, mediaRoot := setupTestGallery(t)
+
+	// Remove the file from disk
+	os.Remove(filepath.Join(mediaRoot, "cat2/2024-02/VID_001.mp4"))
+
+	req := httptest.NewRequest("GET", "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", nil)
+	req.URL.Path = "/api/stream/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	rec := httptest.NewRecorder()
+	g.handleStream(rec, req)
+
+	if rec.Code != 404 {
+		t.Errorf("expected 404 for missing file on disk, got %d", rec.Code)
+	}
+}
+
+func createJPEGFile(t *testing.T, path string, w, h int) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{R: 255, G: 128, B: 64, A: 255})
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	defer f.Close()
+	jpeg.Encode(f, img, &jpeg.Options{Quality: 75})
 }

@@ -153,6 +153,13 @@ func TestFaceDB(t *testing.T) {
 	})
 }
 
+func TestOpenFaceDBNotFound(t *testing.T) {
+	_, err := OpenFaceDB("/nonexistent/path/faces.db")
+	if err == nil {
+		t.Error("expected error for non-existent faces db")
+	}
+}
+
 func TestCosineSim(t *testing.T) {
 	tests := []struct {
 		a, b   []float32

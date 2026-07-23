@@ -1,5 +1,9 @@
 # media-gallery-go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/javimosch/media-gallery-go.svg)](https://pkg.go.dev/github.com/javimosch/media-gallery-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/javimosch/media-gallery-go)](https://goreportcard.com/report/github.com/javimosch/media-gallery-go)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 High-performance media gallery web UI written in Go with an embedded Vue 3 frontend. Browse, search, and stream photos and videos from a SQLite inventory database. Optional AI-powered face recognition via InsightFace.
 
 ## Features

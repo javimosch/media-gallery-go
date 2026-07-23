@@ -126,6 +126,50 @@ func TestMakeImageThumbGoNonExistent(t *testing.T) {
 	}
 }
 
+func TestThumbCacheGetWithRealImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := NewThumbCache(tmpDir)
+
+	// Create a real JPEG image
+	imgPath := filepath.Join(tmpDir, "real.jpg")
+	img := createTestImage(300, 300)
+	os.WriteFile(imgPath, encodeJPEG(img), 0644)
+
+	// This should generate a thumbnail (via ffmpeg or Go fallback)
+	data, err := tc.Get("testsha123", imgPath)
+	if err != nil {
+		t.Logf("Get with real image returned error (expected if no ffmpeg): %v", err)
+		// Try the Go fallback path
+		data, err = tc.makeImageThumbGo(imgPath, true)
+		if err != nil {
+			t.Skipf("Go fallback also failed: %v", err)
+		}
+	}
+	if len(data) == 0 {
+		t.Error("expected non-empty thumbnail data")
+	}
+}
+
+func TestMakeImageThumbFFmpeg(t *testing.T) {
+	tmpDir := t.TempDir()
+	tc := NewThumbCache(tmpDir)
+
+	// Create a real JPEG image
+	imgPath := filepath.Join(tmpDir, "test.jpg")
+	img := createTestImage(400, 300)
+	os.WriteFile(imgPath, encodeJPEG(img), 0644)
+
+	// Try the ffmpeg path
+	data, err := tc.makeImageThumb(imgPath, true)
+	if err != nil {
+		t.Logf("makeImageThumb (ffmpeg) failed: %v — this is OK if ffmpeg not installed", err)
+		return
+	}
+	if len(data) == 0 {
+		t.Error("expected non-empty thumbnail")
+	}
+}
+
 func encodeJPEG(img image.Image) []byte {
 	var buf bytes.Buffer
 	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 75})

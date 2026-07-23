@@ -189,6 +189,69 @@ func TestHandleFaceThumb(t *testing.T) {
 	}
 }
 
+func TestHandleFaceThumbWithFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/faces.db"
+
+	conn, _ := sql.Open("sqlite", dbPath)
+	conn.Exec(`
+		CREATE TABLE faces (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sha256 TEXT NOT NULL, relpath TEXT NOT NULL, face_idx INTEGER NOT NULL,
+			bbox TEXT NOT NULL, embedding BLOB NOT NULL, gender INTEGER, age INTEGER,
+			thumb_path TEXT, scanned_at REAL NOT NULL, UNIQUE(sha256, face_idx)
+		);
+		CREATE TABLE scan_progress (sha256 TEXT PRIMARY KEY, status TEXT NOT NULL, face_count INTEGER DEFAULT 0, scanned_at REAL);
+	`)
+
+	// Create a real thumb file
+	thumbPath := filepath.Join(tmpDir, "face_thumb.jpg")
+	os.WriteFile(thumbPath, []byte("fake-jpeg-data"), 0644)
+
+	emb := makeEmbedding([]float32{1.0, 0.0})
+	conn.Exec(`INSERT INTO faces (sha256, relpath, face_idx, bbox, embedding, gender, age, thumb_path, scanned_at) VALUES
+		('sha001', 'cat/2024-01/IMG_001.jpg', 0, '[10,20,30,40]', ?, 1, 30, ?, 1700000000)`, emb, thumbPath)
+	conn.Close()
+
+	fdb, _ := OpenFaceDB(dbPath)
+	fh := NewFaceHandler(fdb, tmpDir+"/media")
+
+	req := httptest.NewRequest("GET", "/api/face-thumb/1", nil)
+	req.URL.Path = "/api/face-thumb/1"
+	rec := httptest.NewRecorder()
+	fh.handleFaceThumb(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("expected 200 for existing thumb, got %d", rec.Code)
+	}
+}
+
+func TestHandleFaceThumbInvalidID(t *testing.T) {
+	fh := setupTestFaceHandler(t)
+
+	req := httptest.NewRequest("GET", "/api/face-thumb/abc", nil)
+	req.URL.Path = "/api/face-thumb/abc"
+	rec := httptest.NewRecorder()
+	fh.handleFaceThumb(rec, req)
+
+	if rec.Code != 400 {
+		t.Errorf("expected 400 for invalid id, got %d", rec.Code)
+	}
+}
+
+func TestHandleFaceThumbNotFound(t *testing.T) {
+	fh := setupTestFaceHandler(t)
+
+	req := httptest.NewRequest("GET", "/api/face-thumb/999", nil)
+	req.URL.Path = "/api/face-thumb/999"
+	rec := httptest.NewRecorder()
+	fh.handleFaceThumb(rec, req)
+
+	if rec.Code != 404 {
+		t.Errorf("expected 404 for missing face, got %d", rec.Code)
+	}
+}
+
 func TestHandleFaceThumbDisabled(t *testing.T) {
 	var fh *FaceHandler
 	req := httptest.NewRequest("GET", "/api/face-thumb/1", nil)

@@ -1,10 +1,16 @@
 package main
 
 import (
+	"database/sql"
+	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestResolvePath(t *testing.T) {
@@ -73,5 +79,54 @@ func TestHandleStatusAPI(t *testing.T) {
 
 	if rec.Code != 200 {
 		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestStartServer(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+	mediaRoot := tmpDir + "/media"
+	os.MkdirAll(mediaRoot, 0755)
+
+	// Create test DB
+	conn, _ := sql.Open("sqlite", dbPath)
+	conn.Exec("CREATE TABLE files (relpath TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, sha256 TEXT, scanned_at INTEGER)")
+	conn.Exec("INSERT INTO files VALUES ('test/2024-01/IMG.jpg', 1000, 1700000000, 'aaaa', 1700000001)")
+	conn.Close()
+
+	cfg := ServerConfig{
+		Port:          18090,
+		MediaRoot:     mediaRoot,
+		DBPath:        dbPath,
+		ThumbDir:      tmpDir + "/thumbs",
+		MaxConcurrent: 2,
+	}
+
+	// Start server in goroutine
+	go startServer(cfg)
+
+	// Wait for server to be ready
+	time.Sleep(200 * time.Millisecond)
+
+	// Test that it responds
+	resp, err := http.Get("http://localhost:18090/api/health")
+	if err != nil {
+		t.Fatalf("server not reachable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Test status endpoint
+	resp2, err := http.Get("http://localhost:18090/api/status")
+	if err != nil {
+		t.Fatalf("status endpoint failed: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != 200 {
+		t.Errorf("expected 200 for status, got %d", resp2.StatusCode)
 	}
 }

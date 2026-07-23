@@ -159,6 +159,21 @@ func TestGzipMiddlewareNonAPI(t *testing.T) {
 	}
 }
 
+func TestGzipMiddlewareAPIPath(t *testing.T) {
+	handler := GzipMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/browse", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Error("should gzip API paths when Accept-Encoding includes gzip")
+	}
+}
+
 func TestLoggingMiddleware(t *testing.T) {
 	handler := LoggingMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
