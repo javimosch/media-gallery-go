@@ -235,7 +235,7 @@ func (d *DB) GetStats() (*Stats, error) {
 	s := &Stats{}
 
 	d.conn.QueryRow("SELECT COUNT(*), COALESCE(SUM(size),0) FROM files").Scan(&s.TotalFiles, &s.TotalSize)
-	d.conn.QueryRow("SELECT COUNT(*), COALESCE(SUM(size),0) FROM (SELECT sha256, COUNT(*) c, SUM(size) s FROM files WHERE sha256 != '' GROUP BY sha256 HAVING c > 1)").Scan(&s.DupeGroups, &s.DupeSize)
+	d.conn.QueryRow("SELECT COUNT(*), COALESCE(SUM(s),0) FROM (SELECT sha256, COUNT(*) c, SUM(size) s FROM files WHERE sha256 != '' GROUP BY sha256 HAVING c > 1)").Scan(&s.DupeGroups, &s.DupeSize)
 	d.conn.QueryRow("SELECT COALESCE(SUM(c),0) FROM (SELECT COUNT(*) c FROM files WHERE sha256 != '' GROUP BY sha256 HAVING c > 1)").Scan(&s.DupeFiles)
 
 	// misfiled from flagged_dupes (if table exists)
