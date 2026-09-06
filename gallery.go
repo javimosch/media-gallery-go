@@ -58,8 +58,9 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	hideJunk := r.URL.Query().Get("hide_junk") == "1"
+	hasFace := r.URL.Query().Get("has_face") == "1"
 
-	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, g.faceDB)
+	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB)
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return

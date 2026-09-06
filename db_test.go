@@ -38,7 +38,7 @@ func TestOpenDB(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Browse all", func(t *testing.T) {
-		r, err := db.Browse("", "", "", 10, false, nil)
+		r, err := db.Browse("", "", "", 10, false, false, nil)
 		if err != nil {
 			t.Fatalf("Browse: %v", err)
 		}
@@ -51,7 +51,7 @@ func TestOpenDB(t *testing.T) {
 	})
 
 	t.Run("Browse with category", func(t *testing.T) {
-		r, err := db.Browse("family-media-sorted", "", "", 10, false, nil)
+		r, err := db.Browse("family-media-sorted", "", "", 10, false, false, nil)
 		if err != nil {
 			t.Fatalf("Browse: %v", err)
 		}
@@ -61,7 +61,7 @@ func TestOpenDB(t *testing.T) {
 	})
 
 	t.Run("Browse with yearMonth", func(t *testing.T) {
-		r, err := db.Browse("", "2024-01", "", 10, false, nil)
+		r, err := db.Browse("", "2024-01", "", 10, false, false, nil)
 		if err != nil {
 			t.Fatalf("Browse: %v", err)
 		}
@@ -72,7 +72,7 @@ func TestOpenDB(t *testing.T) {
 	})
 
 	t.Run("Browse with category + yearMonth", func(t *testing.T) {
-		r, err := db.Browse("family-media-sorted", "2024-01", "", 10, false, nil)
+		r, err := db.Browse("family-media-sorted", "2024-01", "", 10, false, false, nil)
 		if err != nil {
 			t.Fatalf("Browse: %v", err)
 		}
@@ -82,7 +82,7 @@ func TestOpenDB(t *testing.T) {
 	})
 
 	t.Run("Browse pagination", func(t *testing.T) {
-		r, err := db.Browse("", "", "", 2, false, nil)
+		r, err := db.Browse("", "", "", 2, false, false, nil)
 		if err != nil {
 			t.Fatalf("Browse: %v", err)
 		}
@@ -273,7 +273,7 @@ func TestBrowseLimitClamping(t *testing.T) {
 	defer db.Close()
 
 	// limit 0 should default to 50
-	r, err := db.Browse("", "", "", 0, false, nil)
+	r, err := db.Browse("", "", "", 0, false, false, nil)
 	if err != nil {
 		t.Fatalf("Browse with limit 0: %v", err)
 	}

@@ -4,8 +4,12 @@ const GalleryView = {
         <div class="top-bar">
             <h1>Gallery</h1>
             <label class="junk-toggle">
-                <input type="checkbox" v-model="hideJunk" @change="toggleJunk" />
+                <input type="checkbox" v-model="hideJunk" @change="resetAndLoad" />
                 <span>Hide junk</span>
+            </label>
+            <label class="junk-toggle">
+                <input type="checkbox" v-model="hasFace" @change="resetAndLoad" />
+                <span>Has face</span>
             </label>
             <div class="chip-row">
                 <div class="chip" :class="{active: !category}" @click="setCategory('')">All</div>
@@ -43,6 +47,7 @@ const GalleryView = {
         const categories = Vue.ref([]);
         const yearMonths = Vue.ref([]);
         const hideJunk = Vue.ref(true);
+        const hasFace = Vue.ref(false);
 
         async function loadCategories() {
             try {
@@ -67,6 +72,7 @@ const GalleryView = {
                 if (yearMonth.value) url += '&ym=' + encodeURIComponent(yearMonth.value);
                 if (cursor.value) url += '&cursor=' + encodeURIComponent(cursor.value);
                 if (hideJunk.value) url += '&hide_junk=1';
+                if (hasFace.value) url += '&has_face=1';
                 const data = await fetchJSON(url);
                 files.value = files.value.concat(data.files || []);
                 cursor.value = data.next_cursor || '';
@@ -84,10 +90,6 @@ const GalleryView = {
             cursor.value = '';
             hasMore.value = false;
             load();
-        }
-
-        function toggleJunk() {
-            resetAndLoad();
         }
 
         function setCategory(c) {
@@ -110,7 +112,7 @@ const GalleryView = {
             load();
         });
 
-        return { files, loading, hasMore, category, yearMonth, categories, yearMonths, hideJunk,
-                 loadMore, setCategory, setYearMonth, toggleJunk, openFile, shortName, formatYM };
+        return { files, loading, hasMore, category, yearMonth, categories, yearMonths, hideJunk, hasFace,
+                 loadMore, setCategory, setYearMonth, resetAndLoad, openFile, shortName, formatYM };
     }
 };
