@@ -104,7 +104,11 @@ const GalleryView = {
             resetAndLoad();
         }
 
-        function openFile(file) { galleryState.lightboxFile = file; }
+        function openFile(file) {
+            galleryState.lightboxFiles = files.value;
+            galleryState.lightboxIndex = files.value.findIndex(f => f.sha256 === file.sha256 && f.relpath === file.relpath);
+            galleryState.lightboxFile = file;
+        }
 
         Vue.onMounted(() => {
             loadCategories();

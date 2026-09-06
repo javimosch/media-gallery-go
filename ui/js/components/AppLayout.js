@@ -30,7 +30,10 @@ const AppLayout = {
 
         <lightbox
             :file="galleryState.lightboxFile"
-            @close="galleryState.lightboxFile = null"
+            :files="galleryState.lightboxFiles"
+            :index="galleryState.lightboxIndex"
+            @close="closeLightbox"
+            @navigate="navigateLightbox"
         ></lightbox>
     </div>
     `,
@@ -51,9 +54,21 @@ const AppLayout = {
             });
         }
 
+        function closeLightbox() {
+            galleryState.lightboxFile = null;
+            galleryState.lightboxFiles = [];
+            galleryState.lightboxIndex = -1;
+        }
+
+        function navigateLightbox(newIndex) {
+            if (newIndex < 0 || newIndex >= galleryState.lightboxFiles.length) return;
+            galleryState.lightboxIndex = newIndex;
+            galleryState.lightboxFile = galleryState.lightboxFiles[newIndex];
+        }
+
         Vue.onMounted(() => lucide.createIcons());
         Vue.onUpdated(() => lucide.createIcons());
 
-        return { galleryState, navigate, navItems, mainScroll };
+        return { galleryState, navigate, navItems, mainScroll, closeLightbox, navigateLightbox };
     }
 };

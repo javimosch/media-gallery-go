@@ -132,10 +132,17 @@ def main():
         conn.close()
         return
 
-    # Init insightface
+    # Init insightface — limit threads to be gentle on the host
     os.environ['OMP_NUM_THREADS'] = '2'
+    os.environ['OMP_NUM_THREADS'] = '2'
+    import onnxruntime as ort
+    ort.set_default_logger_severity(3)  # suppress warnings
+    so = ort.SessionOptions()
+    so.intra_op_num_threads = 2
+    so.inter_op_num_threads = 1
+    so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     from insightface.app import FaceAnalysis
-    app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+    app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'], options=so)
     app.prepare(ctx_id=-1, det_size=(args.det_size, args.det_size))
 
     import cv2

@@ -12,12 +12,13 @@ const ThumbGrid = {
             <p class="text-sm">No files found</p>
         </div>
         <div class="thumb-grid" v-if="files.length > 0">
-            <div v-for="file in files" :key="file.sha256 + file.relpath"
+            <div v-for="(file, i) in files" :key="file.sha256 + file.relpath"
                  class="thumb-item"
                  @click="$emit('open-file', file)">
                 <img :src="'/api/thumb/' + file.sha256"
                      :alt="file.relpath"
                      loading="lazy"
+                     decoding="async"
                      draggable="false"
                      @error="onImgError">
                 <span v-if="isVideo(file.relpath)" class="video-badge">
@@ -29,11 +30,15 @@ const ThumbGrid = {
         <div v-if="hasMore && !loading && files.length > 0"
              class="scroll-sentinel"
              ref="sentinel">
-            <button class="load-more-btn" @click="$emit('load-more')">Load more</button>
+            <button v-if="!infiniteScroll" class="load-more-btn" @click="$emit('load-more')">Load more</button>
+            <div v-else class="loading-spinner"></div>
         </div>
     </div>
     `,
     setup(props, { emit }) {
+        const infiniteScroll = Vue.computed(() => galleryState.settings.infiniteScroll);
+        let observer = null;
+
         function isVideo(path) {
             return ['mp4', 'mov', 'avi', 'mkv', 'wmv'].includes(path.toLowerCase().split('.').pop());
         }
@@ -41,24 +46,43 @@ const ThumbGrid = {
             e.target.style.opacity = '0.2';
         }
 
-        // Infinite scroll via IntersectionObserver
-        Vue.onMounted(() => {
-            lucide.createIcons();
-            const observer = new IntersectionObserver((entries) => {
+        function setupObserver() {
+            if (observer) { observer.disconnect(); observer = null; }
+            if (!infiniteScroll.value) return;
+            const scrollRoot = document.querySelector('.scroll-container');
+            observer = new IntersectionObserver((entries) => {
                 if (entries[0].isIntersecting && props.hasMore && !props.loading) {
                     emit('load-more');
                 }
-            }, { rootMargin: '200px' });
+            }, { root: scrollRoot || null, rootMargin: '400px' });
             Vue.nextTick(() => {
                 const el = document.querySelector('.scroll-sentinel');
                 if (el) observer.observe(el);
             });
-            // Store for cleanup
-            window._thumbObserver = observer;
+        }
+
+        Vue.onMounted(() => {
+            lucide.createIcons();
+            setupObserver();
         });
 
-        Vue.onUpdated(() => lucide.createIcons());
+        Vue.onUpdated(() => {
+            lucide.createIcons();
+            // Re-observe sentinel after DOM updates (new content may have shifted it)
+            if (infiniteScroll.value && observer) {
+                Vue.nextTick(() => {
+                    const el = document.querySelector('.scroll-sentinel');
+                    if (el) { observer.disconnect(); observer.observe(el); }
+                });
+            }
+        });
 
-        return { isVideo, onImgError };
+        Vue.onUnmounted(() => {
+            if (observer) observer.disconnect();
+        });
+
+        Vue.watch(infiniteScroll, () => setupObserver());
+
+        return { isVideo, onImgError, infiniteScroll };
     }
 };

@@ -514,3 +514,88 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .junk-toggle:hover { color: #ccc; border-color: #555; }
 .junk-toggle input { accent-color: #3b82f6; cursor: pointer; }
+
+/* ===== Sidebar settings ===== */
+.sidebar-settings {
+    border-top: 1px solid #1a1a1a;
+    padding: 8px 0;
+}
+.sidebar-settings-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: #888;
+    cursor: pointer;
+    user-select: none;
+}
+.sidebar-settings-header:hover { color: #ccc; }
+.sidebar-settings-body {
+    padding: 4px 16px 12px;
+}
+.setting-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #aaa;
+    cursor: pointer;
+    user-select: none;
+    padding: 6px 0;
+}
+.setting-toggle input { accent-color: #3b82f6; cursor: pointer; }
+.setting-hint {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.6;
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: #111;
+    border-radius: 4px;
+}
+.setting-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #ccc;
+}
+
+/* ===== Lightbox navigation ===== */
+.lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.5);
+    border: none;
+    color: #fff;
+    padding: 12px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    z-index: 10;
+}
+.lightbox-nav:hover { background: rgba(0,0,0,0.8); }
+.lightbox-prev { left: 16px; }
+.lightbox-next { right: 16px; }
+.lightbox-position { color: #888; }
+.lightbox-hint {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+}
+.lightbox-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #ccc;
+}

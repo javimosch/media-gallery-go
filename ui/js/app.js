@@ -1,8 +1,27 @@
 // Global state shared across components
+const defaultSettings = {
+    infiniteScroll: window.innerWidth > 1000,
+    fastGallery: false,
+};
+
+const savedSettings = {};
+try {
+    const raw = localStorage.getItem('gallerySettings');
+    if (raw) Object.assign(savedSettings, JSON.parse(raw));
+} catch (e) {}
+
 const galleryState = Vue.reactive({
     currentView: 'gallery',
     lightboxFile: null,
+    lightboxFiles: [],
+    lightboxIndex: -1,
+    settings: Object.assign({}, defaultSettings, savedSettings),
 });
+
+// Persist settings to localStorage
+Vue.watch(() => galleryState.settings, (val) => {
+    try { localStorage.setItem('gallerySettings', JSON.stringify(val)); } catch (e) {}
+}, { deep: true });
 
 async function fetchJSON(url) {
     const res = await fetch(url, { cache: 'no-cache' });

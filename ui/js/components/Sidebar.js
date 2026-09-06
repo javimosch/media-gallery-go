@@ -22,10 +22,33 @@ const Sidebar = {
                 {{ item.label }}
             </div>
         </nav>
+        <div class="sidebar-settings">
+            <div class="sidebar-settings-header" @click="showSettings = !showSettings">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span>Settings</span>
+                <i data-lucide="chevron-down" class="w-3 h-3 ml-auto" v-if="!showSettings"></i>
+                <i data-lucide="chevron-up" class="w-3 h-3 ml-auto" v-if="showSettings"></i>
+            </div>
+            <div v-if="showSettings" class="sidebar-settings-body">
+                <label class="setting-toggle">
+                    <input type="checkbox" v-model="galleryState.settings.infiniteScroll" />
+                    <span>Infinite scroll</span>
+                </label>
+                <label class="setting-toggle">
+                    <input type="checkbox" v-model="galleryState.settings.fastGallery" />
+                    <span>Fast gallery mode</span>
+                </label>
+                <div class="setting-hint">
+                    <kbd>A</kbd>/<kbd>D</kbd> or arrows to navigate<br>
+                    <kbd>Space</kbd> for full resolution
+                </div>
+            </div>
+        </div>
     </aside>
     `,
     setup() {
         const stats = Vue.ref(null);
+        const showSettings = Vue.ref(false);
         const navItems = [
             { id: 'gallery', label: 'Gallery', icon: 'grid-3x3' },
             { id: 'faces', label: 'Faces', icon: 'scan-face' },
@@ -40,6 +63,6 @@ const Sidebar = {
 
         Vue.onMounted(() => { loadStats(); lucide.createIcons(); });
         Vue.onUpdated(() => lucide.createIcons());
-        return { navItems, stats, formatSize };
+        return { navItems, stats, showSettings, galleryState, formatSize };
     }
 };
