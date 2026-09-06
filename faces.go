@@ -55,6 +55,27 @@ func OpenFaceDB(path string) (*FaceDB, error) {
 
 func (f *FaceDB) Close() error { return f.conn.Close() }
 
+// faceSHASet returns a comma-separated, quoted list of distinct SHA256 values
+// that have at least one detected face. Used for junk filtering in Browse.
+// Returns empty string if no faces or error.
+func (f *FaceDB) faceSHASet() string {
+	rows, err := f.conn.Query("SELECT DISTINCT sha256 FROM faces")
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var shas []string
+	for rows.Next() {
+		var s string
+		rows.Scan(&s)
+		shas = append(shas, "'"+s+"'")
+	}
+	if len(shas) == 0 {
+		return ""
+	}
+	return strings.Join(shas, ",")
+}
+
 func (f *FaceDB) Status() (*FaceScanStatus, error) {
 	s := &FaceScanStatus{}
 	f.conn.QueryRow("SELECT COUNT(*) FROM scan_progress WHERE status='done'").Scan(&s.Scanned)

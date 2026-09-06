@@ -50,7 +50,7 @@ func setupTestGallery(t *testing.T) (*GalleryHandler, string) {
 	}
 
 	thumbs := NewThumbCache(tmpDir + "/thumbs")
-	gallery := NewGalleryHandler(db, thumbs, mediaRoot)
+	gallery := NewGalleryHandler(db, thumbs, mediaRoot, nil)
 	return gallery, mediaRoot
 }
 

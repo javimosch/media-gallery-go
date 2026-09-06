@@ -497,3 +497,20 @@ input[type="range"]::-webkit-slider-thumb {
     background: #3b82f6;
     cursor: pointer;
 }
+
+/* ===== Junk toggle ===== */
+.junk-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #999;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+}
+.junk-toggle:hover { color: #ccc; border-color: #555; }
+.junk-toggle input { accent-color: #3b82f6; cursor: pointer; }

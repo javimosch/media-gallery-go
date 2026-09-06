@@ -14,10 +14,11 @@ type GalleryHandler struct {
 	db        *DB
 	thumbs    *ThumbCache
 	mediaRoot string
+	faceDB    *FaceDB
 }
 
-func NewGalleryHandler(db *DB, thumbs *ThumbCache, mediaRoot string) *GalleryHandler {
-	return &GalleryHandler{db: db, thumbs: thumbs, mediaRoot: mediaRoot}
+func NewGalleryHandler(db *DB, thumbs *ThumbCache, mediaRoot string, faceDB *FaceDB) *GalleryHandler {
+	return &GalleryHandler{db: db, thumbs: thumbs, mediaRoot: mediaRoot, faceDB: faceDB}
 }
 
 func (g *GalleryHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -56,8 +57,9 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	yearMonth := r.URL.Query().Get("ym")
 	cursor := r.URL.Query().Get("cursor")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	hideJunk := r.URL.Query().Get("hide_junk") == "1"
 
-	result, err := g.db.Browse(category, yearMonth, cursor, limit)
+	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, g.faceDB)
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return

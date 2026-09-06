@@ -3,6 +3,10 @@ const GalleryView = {
     <div>
         <div class="top-bar">
             <h1>Gallery</h1>
+            <label class="junk-toggle">
+                <input type="checkbox" v-model="hideJunk" @change="toggleJunk" />
+                <span>Hide junk</span>
+            </label>
             <div class="chip-row">
                 <div class="chip" :class="{active: !category}" @click="setCategory('')">All</div>
                 <div v-for="c in categories" :key="c"
@@ -38,6 +42,7 @@ const GalleryView = {
         const yearMonth = Vue.ref('');
         const categories = Vue.ref([]);
         const yearMonths = Vue.ref([]);
+        const hideJunk = Vue.ref(true);
 
         async function loadCategories() {
             try {
@@ -61,6 +66,7 @@ const GalleryView = {
                 if (category.value) url += '&category=' + encodeURIComponent(category.value);
                 if (yearMonth.value) url += '&ym=' + encodeURIComponent(yearMonth.value);
                 if (cursor.value) url += '&cursor=' + encodeURIComponent(cursor.value);
+                if (hideJunk.value) url += '&hide_junk=1';
                 const data = await fetchJSON(url);
                 files.value = files.value.concat(data.files || []);
                 cursor.value = data.next_cursor || '';
@@ -73,22 +79,27 @@ const GalleryView = {
             if (hasMore.value && !loading.value) load();
         }
 
-        function setCategory(c) {
-            category.value = c;
-            yearMonth.value = '';
+        function resetAndLoad() {
             files.value = [];
             cursor.value = '';
             hasMore.value = false;
-            loadYearMonths();
             load();
+        }
+
+        function toggleJunk() {
+            resetAndLoad();
+        }
+
+        function setCategory(c) {
+            category.value = c;
+            yearMonth.value = '';
+            resetAndLoad();
+            loadYearMonths();
         }
 
         function setYearMonth(ym) {
             yearMonth.value = ym;
-            files.value = [];
-            cursor.value = '';
-            hasMore.value = false;
-            load();
+            resetAndLoad();
         }
 
         function openFile(file) { galleryState.lightboxFile = file; }
@@ -99,7 +110,7 @@ const GalleryView = {
             load();
         });
 
-        return { files, loading, hasMore, category, yearMonth, categories, yearMonths,
-                 loadMore, setCategory, setYearMonth, openFile, shortName, formatYM };
+        return { files, loading, hasMore, category, yearMonth, categories, yearMonths, hideJunk,
+                 loadMore, setCategory, setYearMonth, toggleJunk, openFile, shortName, formatYM };
     }
 };

@@ -67,7 +67,7 @@ func (d *DB) Close() error {
 	return d.conn.Close()
 }
 
-func (d *DB) Browse(category, yearMonth, cursor string, limit int) (*BrowseResult, error) {
+func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool, faceDB *FaceDB) (*BrowseResult, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -88,18 +88,85 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int) (*BrowseResul
 		args = append(args, cursor)
 	}
 
+	// Junk filter: hide images < 50KB, or 50-200KB images without a detected face.
+	// Videos and images >= 200KB are never junk.
+	junkCondition := ""
+	if hideJunk {
+		faceSHAs := ""
+		if faceDB != nil {
+			faceSHAs = faceDB.faceSHASet()
+		}
+		if faceSHAs != "" {
+			// NOT junk: NOT is_image OR size >= 204800 OR (size >= 51200 AND sha256 IN (...))
+			junkCondition = `(
+				NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'
+					OR lower(relpath) LIKE '%.gif' OR lower(relpath) LIKE '%.bmp' OR lower(relpath) LIKE '%.tif' OR lower(relpath) LIKE '%.tiff')
+				OR size >= 204800
+				OR (size >= 51200 AND sha256 IN (` + faceSHAs + `))
+			)`
+		} else {
+			// No faces DB: NOT junk = NOT is_image OR size >= 51200
+			junkCondition = `(
+				NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'
+					OR lower(relpath) LIKE '%.gif' OR lower(relpath) LIKE '%.bmp' OR lower(relpath) LIKE '%.tif' OR lower(relpath) LIKE '%.tiff')
+				OR size >= 51200
+			)`
+		}
+		// Add as a condition (not a suffix)
+		conditions = append(conditions, junkCondition)
+		junkCondition = "" // already in conditions
+	}
+
 	where := ""
 	if len(conditions) > 0 {
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	// total count
-	totalQuery := "SELECT COUNT(*) FROM files" + wherePathOnly(where, category, yearMonth)
+	// total count (without cursor, with junk filter for accurate filtered total)
+	totalWhere := wherePathOnly(where, category, yearMonth)
+	if hideJunk {
+		// Rebuild junk condition for total query (without cursor)
+		totalConds := []string{}
+		if category != "" {
+			totalConds = append(totalConds, "relpath LIKE '"+category+"/%'")
+		}
+		if yearMonth != "" {
+			totalConds = append(totalConds, "relpath LIKE '%/"+yearMonth+"/%'")
+		}
+		// Add junk condition
+		faceSHAs := ""
+		if faceDB != nil {
+			faceSHAs = faceDB.faceSHASet()
+		}
+		if faceSHAs != "" {
+			totalConds = append(totalConds, `(
+				NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'
+					OR lower(relpath) LIKE '%.gif' OR lower(relpath) LIKE '%.bmp' OR lower(relpath) LIKE '%.tif' OR lower(relpath) LIKE '%.tiff')
+				OR size >= 204800
+				OR (size >= 51200 AND sha256 IN (` + faceSHAs + `))
+			)`)
+		} else {
+			totalConds = append(totalConds, `(
+				NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'
+					OR lower(relpath) LIKE '%.gif' OR lower(relpath) LIKE '%.bmp' OR lower(relpath) LIKE '%.tif' OR lower(relpath) LIKE '%.tiff')
+				OR size >= 51200
+			)`)
+		}
+		totalWhere = " WHERE " + strings.Join(totalConds, " AND ")
+	}
+	totalQuery := "SELECT COUNT(*) FROM files" + totalWhere
 	var total int
-	d.conn.QueryRow(totalQuery, args[:len(args)-maybeCursor(cursor)]...).Scan(&total)
+	totalArgs := []interface{}{}
+	if category != "" {
+		totalArgs = append(totalArgs, category)
+	}
+	if yearMonth != "" {
+		totalArgs = append(totalArgs, yearMonth)
+	}
+	d.conn.QueryRow(totalQuery, totalArgs...).Scan(&total)
 
 	query := "SELECT relpath, size, mtime, COALESCE(sha256,''), COALESCE(scanned_at,0) FROM files" +
-		where + " ORDER BY relpath LIMIT ?"
+		where + junkCondition + " ORDER BY relpath LIMIT ?"
 	args = append(args, limit+1)
 
 	rows, err := d.conn.Query(query, args...)

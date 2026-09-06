@@ -53,7 +53,21 @@ func startServer(cfg ServerConfig) {
 	defer db.Close()
 
 	thumbs := NewThumbCache(cfg.ThumbDir)
-	gallery := NewGalleryHandler(db, thumbs, cfg.MediaRoot)
+
+	// Face recognition (opt-in: only if faces-db flag is set and file exists)
+	var faceHandler *FaceHandler
+	var faceDB *FaceDB
+	if cfg.FacesDB != "" {
+		if fdb, err := OpenFaceDB(cfg.FacesDB); err == nil {
+			faceDB = fdb
+			faceHandler = NewFaceHandler(fdb, cfg.MediaRoot)
+			log.Printf("Face recognition: enabled (%s)", cfg.FacesDB)
+		} else {
+			log.Printf("Face recognition: disabled (%v)", err)
+		}
+	}
+
+	gallery := NewGalleryHandler(db, thumbs, cfg.MediaRoot, faceDB)
 
 	mux := http.NewServeMux()
 
@@ -62,16 +76,9 @@ func startServer(cfg ServerConfig) {
 	mux.HandleFunc("/api/status", handleStatusAPI)
 	mux.HandleFunc("/api/health", handleHealthAPI)
 
-	// Face recognition (opt-in: only if faces-db flag is set and file exists)
-	var faceHandler *FaceHandler
-	if cfg.FacesDB != "" {
-		if fdb, err := OpenFaceDB(cfg.FacesDB); err == nil {
-			faceHandler = NewFaceHandler(fdb, cfg.MediaRoot)
-			faceHandler.RegisterRoutes(mux)
-			log.Printf("Face recognition: enabled (%s)", cfg.FacesDB)
-		} else {
-			log.Printf("Face recognition: disabled (%v)", err)
-		}
+	// Face recognition routes
+	if faceHandler != nil {
+		faceHandler.RegisterRoutes(mux)
 	}
 
 	// Static UI
