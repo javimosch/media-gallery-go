@@ -58,10 +58,14 @@ const FacesView = {
                 </div>
             </div>
 
-            <!-- Load more -->
-            <button v-if="faces.length > 0 && !selectedFace && hasMore" class="load-more-btn" @click="loadMore">
-                Load more faces
-            </button>
+            <!-- Load more / infinite scroll sentinel -->
+            <div v-if="faces.length > 0 && !selectedFace && hasMore"
+                 class="scroll-sentinel" ref="sentinel">
+                <button v-if="!infiniteScroll" class="load-more-btn" @click="loadMore">
+                    Load more faces
+                </button>
+                <div v-else class="loading-spinner"></div>
+            </div>
         </div>
     </div>
     `,
@@ -118,10 +122,39 @@ const FacesView = {
 
         function onErr(e) { e.target.style.opacity = '0.2'; }
 
-        Vue.onMounted(() => { loadStatus(); load(); lucide.createIcons(); });
-        Vue.onUpdated(() => lucide.createIcons());
+        const infiniteScroll = Vue.computed(() => galleryState.settings.infiniteScroll);
+        let observer = null;
+
+        function setupObserver() {
+            if (observer) { observer.disconnect(); observer = null; }
+            if (!infiniteScroll.value) return;
+            const scrollRoot = document.querySelector('.scroll-container');
+            observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting && hasMore.value && !loading.value && !selectedFace.value) {
+                    loadMore();
+                }
+            }, { root: scrollRoot || null, rootMargin: '400px' });
+            Vue.nextTick(() => {
+                const el = document.querySelector('.scroll-sentinel');
+                if (el) observer.observe(el);
+            });
+        }
+
+        Vue.onMounted(() => { loadStatus(); load(); lucide.createIcons(); setupObserver(); });
+        Vue.onUpdated(() => {
+            lucide.createIcons();
+            if (infiniteScroll.value && observer) {
+                Vue.nextTick(() => {
+                    const el = document.querySelector('.scroll-sentinel');
+                    if (el) { observer.disconnect(); observer.observe(el); }
+                });
+            }
+        });
+        Vue.onUnmounted(() => { if (observer) observer.disconnect(); });
+        Vue.watch(infiniteScroll, () => setupObserver());
 
         return { faces, loading, error, status, hasMore, selectedFace, similar,
-                 thresholdPct, threshold, loadMore, selectFace, searchSimilar, openFile, onErr };
+                 thresholdPct, threshold, infiniteScroll,
+                 loadMore, selectFace, searchSimilar, openFile, onErr };
     }
 };
