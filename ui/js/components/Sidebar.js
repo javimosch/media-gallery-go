@@ -26,8 +26,7 @@ const Sidebar = {
             <div class="sidebar-settings-header" @click="showSettings = !showSettings">
                 <i data-lucide="settings" class="w-4 h-4"></i>
                 <span>Settings</span>
-                <i data-lucide="chevron-down" class="w-3 h-3 ml-auto" v-if="!showSettings"></i>
-                <i data-lucide="chevron-up" class="w-3 h-3 ml-auto" v-if="showSettings"></i>
+                <span class="sidebar-settings-chevron" :class="{ open: showSettings }">&#8250;</span>
             </div>
             <div v-if="showSettings" class="sidebar-settings-body">
                 <label class="setting-toggle">

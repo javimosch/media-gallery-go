@@ -8,7 +8,7 @@ const savedSettings = {};
 try {
     const raw = localStorage.getItem('gallerySettings');
     if (raw) Object.assign(savedSettings, JSON.parse(raw));
-} catch (e) {}
+} catch (e) { /* localStorage blocked by browser — settings won't persist */ }
 
 const galleryState = Vue.reactive({
     currentView: 'gallery',
@@ -18,7 +18,7 @@ const galleryState = Vue.reactive({
     settings: Object.assign({}, defaultSettings, savedSettings),
 });
 
-// Persist settings to localStorage
+// Persist settings to localStorage (best-effort)
 Vue.watch(() => galleryState.settings, (val) => {
     try { localStorage.setItem('gallerySettings', JSON.stringify(val)); } catch (e) {}
 }, { deep: true });

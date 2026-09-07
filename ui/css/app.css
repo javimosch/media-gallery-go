@@ -531,6 +531,14 @@ input[type="range"]::-webkit-slider-thumb {
     user-select: none;
 }
 .sidebar-settings-header:hover { color: #ccc; }
+.sidebar-settings-chevron {
+    margin-left: auto;
+    font-size: 14px;
+    transition: transform 0.15s;
+    transform: rotate(90deg);
+    display: inline-block;
+}
+.sidebar-settings-chevron.open { transform: rotate(-90deg); }
 .sidebar-settings-body {
     padding: 4px 16px 12px;
 }
