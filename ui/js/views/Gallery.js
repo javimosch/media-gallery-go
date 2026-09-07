@@ -77,6 +77,10 @@ const GalleryView = {
                 files.value = files.value.concat(data.files || []);
                 cursor.value = data.next_cursor || '';
                 hasMore.value = !!data.next_cursor;
+                // Keep lightbox files in sync if lightbox is open
+                if (galleryState.lightboxFile) {
+                    galleryState.lightboxFiles = files.value;
+                }
             } catch (e) { console.error(e); }
             loading.value = false;
         }
@@ -115,6 +119,22 @@ const GalleryView = {
             loadYearMonths();
             load();
         });
+
+        // Auto-load more when lightbox navigation approaches the end
+        Vue.watch(() => galleryState.lightboxIndex, (idx) => {
+            if (idx < 0 || !galleryState.lightboxFile) return;
+            const total = galleryState.lightboxFiles.length;
+            if (hasMore.value && !loading.value && idx >= total - 10) {
+                load();
+            }
+        });
+
+        // Also sync lightboxFiles when new files arrive while lightbox is open
+        Vue.watch(files, () => {
+            if (galleryState.lightboxFile) {
+                galleryState.lightboxFiles = files.value;
+            }
+        }, { deep: false });
 
         return { files, loading, hasMore, category, yearMonth, categories, yearMonths, hideJunk, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, shortName, formatYM };
