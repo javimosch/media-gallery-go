@@ -117,6 +117,10 @@ The scan stores face embeddings, bounding boxes, gender/age estimates, and cropp
 CGO_ENABLED=0 go build -ldflags="-s -w" -o media-gallery-go .
 ```
 
+## Related projects
+
+- **[junk-review-go](https://github.com/javimosch/junk-review-go)** — keyboard-driven junk review web UI. Tag files keep/delete across passes, then prune staging areas through a mandatory dry-run with a recoverable trash. The natural companion: curate what's *in* the gallery with media-gallery-go, triage what's *not yet in* with junk-review-go.
+
 ## License
 
 MIT
