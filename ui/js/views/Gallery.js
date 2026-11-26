@@ -17,7 +17,7 @@ const GalleryView = {
                    placeholder="Search by filename, e.g. IMG_20260101" @input="onNameInput">
             <p v-if="nameQuery.trim() && !loading && !failed" class="head-note">
                 Searching {{ group || 'the whole gallery' }}, junk included.
-                <span v-if="category || yearMonth || !showPhotos || !showVideos || hasFace">Other filters are on, clear them to search all of it.</span>
+                <span v-if="category || yearMonth || device || !showPhotos || !showVideos || hasFace">Other filters are on, clear them to search all of it.</span>
             </p>
             <div class="head-row">
                 <span class="head-label">Folder</span>
@@ -40,6 +40,15 @@ const GalleryView = {
                         {{ formatYM(ym) }}
                     </div>
                 </div>
+            </div>
+            <div class="head-row" v-if="devices.length">
+                <label class="head-label" for="device-select">Device</label>
+                <select id="device-select" class="device-select" v-model="device" @change="resetAndLoad">
+                    <option value="">Any device</option>
+                    <optgroup v-for="g in deviceGroups" :key="g.title" :label="g.title">
+                        <option v-for="d in g.items" :key="d.value" :value="d.value">{{ d.label }} ({{ d.count.toLocaleString('en-GB') }})</option>
+                    </optgroup>
+                </select>
             </div>
             <div class="head-toggles">
                 <label class="junk-toggle">
@@ -89,6 +98,37 @@ const GalleryView = {
         const showJunk = Vue.ref(false);
         const hasFace = Vue.ref(false);
 
+        const devices = Vue.ref([]);
+        const device = Vue.ref('');
+        const DEVICE_TYPES = [['phone', 'Phones'], ['camera', 'Cameras'], ['drone', 'Drones'],
+            ['action camera', 'Action cameras'], ['scanner', 'Scanners and software'], ['other', 'Other'], ['unknown', 'Unknown']];
+        const deviceGroups = Vue.computed(() => {
+            const known = DEVICE_TYPES.map(t => t[0]);
+            const typeOf = d => known.includes(d.type) ? d.type : 'other';
+            return DEVICE_TYPES.map(([type, title]) => ({ title, items: devices.value.filter(d => typeOf(d) === type) }))
+                .filter(g => g.items.length);
+        });
+        let deviceRequest = 0;
+
+        // The list follows group, folder and month. A selected device that is not
+        // in the new view is cleared, and the results reload without it.
+        async function loadDevices() {
+            const request = ++deviceRequest;
+            const params = new URLSearchParams();
+            if (group.value) params.set('group', group.value);
+            if (category.value) params.set('category', category.value);
+            if (yearMonth.value) params.set('ym', yearMonth.value);
+            try {
+                const data = await fetchJSON('/api/devices?' + params);
+                if (request !== deviceRequest) return;
+                devices.value = data.devices || [];
+                if (device.value && !devices.value.some(d => d.value === device.value)) {
+                    device.value = '';
+                    resetAndLoad();
+                }
+            } catch (e) { console.error(e); }
+        }
+
         const GROUP_KEY = 'mg.group';
         const groups = Vue.ref([]);
         const group = Vue.ref('');
@@ -134,6 +174,7 @@ const GalleryView = {
             yearMonth.value = '';
             resetAndLoad();
             loadYearMonths();
+            loadDevices();
         }
 
         async function loadCategories() {
@@ -195,6 +236,7 @@ const GalleryView = {
                 if (!showVideos.value) url += '&videos=0';
                 url += showJunk.value ? '&junk=only' : '&hide_junk=1';
                 if (hasFace.value) url += '&has_face=1';
+                if (device.value) url += '&device=' + encodeURIComponent(device.value);
                 const data = await fetchJSON(url);
                 if (gen !== generation) return;
                 total.value = data.total || 0;
@@ -232,11 +274,13 @@ const GalleryView = {
             yearMonth.value = '';
             resetAndLoad();
             loadYearMonths();
+            loadDevices();
         }
 
         function setYearMonth(ym) {
             yearMonth.value = ym;
             resetAndLoad();
+            loadDevices();
         }
 
         function openFile(file) {
@@ -252,6 +296,7 @@ const GalleryView = {
             const saved = storedGroup();
             if (groups.value.some(g => g.name === saved)) group.value = saved;
             loadYearMonths();
+            loadDevices();
             load();
         });
 
@@ -271,7 +316,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
+        return { devices, device, deviceGroups, filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, formatYM };
     }
 };

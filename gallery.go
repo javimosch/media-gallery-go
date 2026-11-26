@@ -49,6 +49,7 @@ func (g *GalleryHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats", g.handleStats)
 	mux.HandleFunc("/api/categories", g.handleCategories)
 	mux.HandleFunc("/api/yearmonths", g.handleYearMonths)
+	mux.HandleFunc("/api/devices", g.handleDevices)
 	mux.HandleFunc("/api/file/", g.handleFile)
 	mux.HandleFunc("/api/thumb/", g.handleThumb)
 	mux.HandleFunc("/api/download/", g.handleDownload)
@@ -86,6 +87,7 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
 		Name:       strings.TrimSpace(r.URL.Query().Get("name")),
 		Group:      r.URL.Query().Get("group"),
+		Device:       deviceFromParam(r.URL.Query().Get("device")),
 		AssignedOnly: r.URL.Query().Get("assigned") == "only",
 		JunkOnly:   r.URL.Query().Get("junk") == "only",
 		HidePhotos: r.URL.Query().Get("photos") == "0",
@@ -185,6 +187,16 @@ func (g *GalleryHandler) handleCategories(w http.ResponseWriter, r *http.Request
 		resp["groups"], resp["total"] = groupFolders(counts), total
 	}
 	sendJSON(w, resp)
+}
+
+func (g *GalleryHandler) handleDevices(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	list, err := g.db.DeviceCounts(q.Get("group"), q.Get("category"), q.Get("ym"))
+	if err != nil {
+		sendError(w, err.Error(), 500)
+		return
+	}
+	sendJSON(w, map[string]interface{}{"devices": list})
 }
 
 func (g *GalleryHandler) handleYearMonths(w http.ResponseWriter, r *http.Request) {

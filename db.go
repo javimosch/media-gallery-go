@@ -13,6 +13,7 @@ type DB struct {
 	conn *sql.DB
 	items          string // listing source, see assignments.go
 	hasAssignments bool
+	hasDevices     bool // see devices.go
 }
 
 type FileRecord struct {
@@ -68,6 +69,9 @@ func OpenDB(path string) (*DB, error) {
 	if err := d.detectAssignments(); err != nil {
 		return nil, fmt.Errorf("check assignments: %w", err)
 	}
+	if err := d.detectDevices(); err != nil {
+		return nil, fmt.Errorf("check devices: %w", err)
+	}
 	return d, nil
 }
 
@@ -83,6 +87,7 @@ type MediaFilter struct {
 	JunkOnly   bool // list only what the junk filter would hide
 	Group      string // folder group from -groups
 	AssignedOnly bool // only assigned files, junk included
+	Device       string // camera model, or unknownDevice
 	// Name keeps files whose filename (not folder) contains it, ignoring case.
 	// A name search also covers junk, so an existing file is never reported missing.
 	Name string
@@ -145,6 +150,11 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	if len(media) > 0 && media[0].Group != "" {
 		conditions = append(conditions, "folder_group(vpath) = ?")
 		args = append(args, media[0].Group)
+	}
+	if len(media) > 0 && media[0].Device != "" {
+		c, a := d.deviceCondition(media[0].Device)
+		conditions = append(conditions, c)
+		args = append(args, a...)
 	}
 	junkOnly := len(media) > 0 && media[0].JunkOnly
 	if len(media) > 0 && media[0].Name != "" {
