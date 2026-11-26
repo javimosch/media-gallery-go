@@ -50,3 +50,28 @@ func TestThumbSourcePrefersHDCopy(t *testing.T) {
 		t.Fatalf("got %s want %s", got, full)
 	}
 }
+
+func TestWantsHDByMediaDate(t *testing.T) {
+	t.Cleanup(func() { configureHDThumbs("", "") })
+	g, _ := setupTestGallery(t)
+	r, err := g.db.Browse("", "2024-02", "", 1, false, false, nil)
+	if err != nil || len(r.Files) == 0 {
+		t.Fatal("no files", err)
+	}
+	sha := r.Files[0].SHA256
+	month := g.db.GalleryMonth(sha)
+	if month < "2024-02" {
+		t.Fatalf("gallery month %q", month)
+	}
+	if g.wantsHD(sha) {
+		t.Error("off by default")
+	}
+	configureHDThumbs(month, "")
+	if !g.wantsHD(sha) {
+		t.Error("same month")
+	}
+	configureHDThumbs("2031-01", "")
+	if g.wantsHD(sha) || g.wantsHD("unknown") {
+		t.Error("older or unknown content")
+	}
+}

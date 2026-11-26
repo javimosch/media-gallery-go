@@ -43,6 +43,13 @@ func (d *DB) detectAssignments() error {
 	return nil
 }
 
+// GalleryMonth is the latest month any copy of the content is shown under.
+func (d *DB) GalleryMonth(sha string) string {
+	var m string
+	d.conn.QueryRow("SELECT COALESCE(MAX(month), '') FROM "+d.items+" WHERE sha256 = ?", sha).Scan(&m)
+	return m
+}
+
 func (d *DB) IsAssigned(sha string) bool {
 	if !d.hasAssignments {
 		return false

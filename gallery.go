@@ -252,6 +252,15 @@ func (g *GalleryHandler) thumbSource(sha, fallback string) string {
 	return fallback
 }
 
+// wantsHD reports whether content gets HD thumbnails whatever its path: it is
+// assigned, or its gallery month is -hd-since or later.
+func (g *GalleryHandler) wantsHD(sha string) bool {
+	if g.db.IsAssigned(sha) {
+		return true
+	}
+	return hdSinceMonth != "" && g.db.GalleryMonth(sha) >= hdSinceMonth
+}
+
 func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 	sha := strings.TrimPrefix(r.URL.Path, "/api/thumb/")
 	if sha == "" || len(sha) != 64 {
@@ -267,7 +276,7 @@ func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
 	if _, statErr := os.Stat(fullPath); statErr == nil {
-		data, err := g.thumbs.Get(sha, g.thumbSource(sha, fullPath), g.db.IsAssigned(sha))
+		data, err := g.thumbs.Get(sha, g.thumbSource(sha, fullPath), g.wantsHD(sha))
 		if err != nil {
 			// Don't cache errors — browser will retry on next view
 			w.Header().Set("Content-Type", "image/jpeg")
