@@ -22,6 +22,7 @@ const ThumbGrid = {
                  @click="$emit('open-file', file)">
                 <img :src="'/api/thumb/' + file.sha256 + '?v=7'"
                      :alt="file.relpath"
+                     :style="rotationStyle(file.sha256)"
                      loading="lazy"
                      decoding="async"
                      draggable="false"
@@ -117,6 +118,6 @@ const ThumbGrid = {
 
         Vue.watch(infiniteScroll, () => setupObserver());
 
-        return { sections, dateLabel, isVideo, onImgError, infiniteScroll };
+        return { rotationStyle, sections, dateLabel, isVideo, onImgError, infiniteScroll };
     }
 };

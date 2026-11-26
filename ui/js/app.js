@@ -15,6 +15,9 @@ const galleryState = Vue.reactive({
     lightboxFile: null,
     lightboxFiles: [],
     lightboxIndex: -1,
+    // clockwise degrees by sha256; originals are untouched, only the display turns
+    rotations: {},
+    canRotate: false,
     settings: Object.assign({}, defaultSettings, savedSettings),
 });
 
@@ -58,4 +61,33 @@ function formatYM(ym) {
     const idx = parseInt(ym.slice(5,7));
     if (isNaN(idx) || idx < 1 || idx > 12) return ym;
     return m[idx-1] + ' ' + ym.slice(0,4);
+}
+
+async function loadRotations() {
+    try {
+        const data = await fetchJSON('/api/rotations');
+        galleryState.rotations = data.rotations || {};
+        galleryState.canRotate = !!data.enabled;
+    } catch (e) { console.error(e); }
+}
+loadRotations();
+
+function rotationStyle(sha) {
+    const degrees = galleryState.rotations[sha];
+    return degrees ? { transform: 'rotate(' + degrees + 'deg)' } : null;
+}
+
+// saves run one after another, so the last click is what stays stored
+let rotationQueue = Promise.resolve();
+
+function saveRotation(sha, degrees) {
+    const result = rotationQueue.then(async () => {
+        const res = await fetch('/api/rotations', { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sha256: sha, degrees }) });
+        if (res.status === 401) location.replace('/login');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+    });
+    rotationQueue = result.catch(() => {});
+    return result;
 }

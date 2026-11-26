@@ -33,6 +33,7 @@ type ServerConfig struct {
 	FacesDB   string
 	HDSince   string
 	Groups    string
+	EditsDB   string
 	AuthFile       string
 	TrustedProxies string
 	ReplicaFrom    string
@@ -74,6 +75,14 @@ func startServer(cfg ServerConfig) {
 	}
 
 	gallery := NewGalleryHandler(db, thumbs, cfg.MediaRoot, faceDB)
+	if cfg.EditsDB != "" {
+		edits, err := OpenEditsDB(cfg.EditsDB)
+		if err != nil {
+			log.Fatalf("Failed to open edits database: %v", err)
+		}
+		defer edits.Close()
+		gallery.edits = edits
+	}
 	// refresh the "missing from primary" set at startup + every 10 minutes
 	gallery.StartSourceRefresh(10 * time.Minute)
 

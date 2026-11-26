@@ -24,7 +24,7 @@ const DupesView = {
                     <div v-if="expanded === group.sha256" class="thumb-grid mt-3">
                         <div v-for="file in groupFiles" :key="file.relpath"
                              class="thumb-item" @click="openFile(file)">
-                            <img :src="'/api/thumb/' + file.sha256 + '?v=7'" loading="lazy" draggable="false" @error="onErr">
+                            <img :src="'/api/thumb/' + file.sha256 + '?v=7'" :style="rotationStyle(file.sha256)" loading="lazy" draggable="false" @error="onErr">
                         </div>
                     </div>
                 </div>
@@ -78,6 +78,6 @@ const DupesView = {
         Vue.onMounted(() => { loadStats(); load(); lucide.createIcons(); });
         Vue.onUpdated(() => lucide.createIcons());
 
-        return { groups, loading, expanded, groupFiles, stats, toggleGroup, loadMore, openFile, onErr, formatSize };
+        return { rotationStyle, groups, loading, expanded, groupFiles, stats, toggleGroup, loadMore, openFile, onErr, formatSize };
     }
 };

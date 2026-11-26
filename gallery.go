@@ -15,6 +15,7 @@ import (
 type GalleryHandler struct {
 	db        *DB
 	thumbs    *ThumbCache
+	edits     *EditsDB // nil = rotation disabled
 	mediaRoot string
 	faceDB    *FaceDB
 	replicas  *ReplicaRegistry
@@ -43,6 +44,7 @@ func (g *GalleryHandler) StartSourceRefresh(interval time.Duration) {
 
 func (g *GalleryHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/browse", g.handleBrowse)
+	mux.HandleFunc("/api/rotations", g.handleRotations)
 	mux.HandleFunc("/api/search", g.handleSearch)
 	mux.HandleFunc("/api/dupes", g.handleDupes)
 	mux.HandleFunc("/api/dupes/", g.handleDupeFiles)

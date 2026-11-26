@@ -14,6 +14,12 @@ const Lightbox = {
                 <i data-lucide="x" class="w-6 h-6"></i>
             </button>
 
+            <div v-if="galleryState.canRotate && isImage(file.relpath)" class="lightbox-rotate">
+                <button type="button" aria-label="Rotate left" title="Rotate left" @click.stop="rotate(-90)">&#8634;</button>
+                <button type="button" aria-label="Rotate right" title="Rotate right" @click.stop="rotate(90)">&#8635;</button>
+                <span v-if="rotateError" role="alert">Rotation not saved</span>
+            </div>
+
             <button v-if="hasPrev" class="lightbox-nav lightbox-prev" @click.stop="prev">
                 <i data-lucide="chevron-left" class="w-6 h-6"></i>
             </button>
@@ -24,7 +30,7 @@ const Lightbox = {
             <img v-if="isImage(file.relpath)"
                  :src="imgSrc"
                  :alt="file.relpath"
-                 :style="{ transform: 'translateY(' + dragY + 'px)' }"
+                 :style="imageStyle"
                  draggable="false"
                  @load="onImgLoad">
             <video v-else-if="isVideo(file.relpath)"
@@ -83,6 +89,34 @@ const Lightbox = {
         function formatSize(bytes) {
             if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
             return (bytes / 1073741824).toFixed(2) + ' GB';
+        }
+
+        const rotateError = Vue.ref(false);
+
+        const imageStyle = Vue.computed(() => {
+            const degrees = galleryState.rotations[props.file?.sha256] || 0;
+            const style = { transform: 'translateY(' + dragY.value + 'px) rotate(' + degrees + 'deg)' };
+            if (degrees % 180 !== 0) {
+                // on its side, the picture's width has to fit the screen height
+                Object.assign(style, { maxWidth: '100vh', maxHeight: '100vw', flexShrink: 0 });
+                if (window.CSS && CSS.supports('height', '100dvh')) {
+                    Object.assign(style, { maxWidth: '100dvh', maxHeight: '100dvw' });
+                }
+            }
+            return style;
+        });
+
+        function rotate(step) {
+            const sha = props.file.sha256;
+            const before = galleryState.rotations[sha] || 0;
+            const after = (before + step + 360) % 360;
+            rotateError.value = false;
+            galleryState.rotations[sha] = after;
+            saveRotation(sha, after).catch(e => {
+                console.error(e);
+                rotateError.value = true;
+                loadRotations(); // show what is really stored
+            });
         }
 
         function updateImgSrc() {
@@ -178,6 +212,7 @@ const Lightbox = {
         // Reset state and update src when file changes
         Vue.watch(() => props.file, () => {
             fullRes.value = false;
+            rotateError.value = false;
             dragY.value = 0;
             dragging = false;
             updateImgSrc();
@@ -205,7 +240,7 @@ const Lightbox = {
 
         Vue.onUpdated(() => lucide.createIcons());
 
-        return { isImage, isVideo, formatSize, dragY, imgSrc, fastGallery, fullRes,
+        return { galleryState, imageStyle, rotate, rotateError, isImage, isVideo, formatSize, dragY, imgSrc, fastGallery, fullRes,
                  hasPrev, hasNext, prev, next, onImgLoad,
                  onTouchStart, onTouchMove, onTouchEnd };
     }

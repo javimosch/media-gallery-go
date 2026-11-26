@@ -734,3 +734,10 @@ input[type="range"]::-webkit-slider-thumb {
 
 .sign-out { margin-left: auto; font-size: 13px; color: #8b96a3; border: 1px solid #2a2a2a; border-radius: 10px; padding: 6px 12px; cursor: pointer; }
 .sign-out:hover { color: #eef1f4; border-color: #555; }
+
+.lightbox-rotate { position: absolute; top: calc(16px + var(--safe-top)); left: 16px; z-index: 2; display: flex; align-items: center; gap: 8px; }
+.lightbox-rotate button { width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(40,40,40,.75); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+.lightbox-rotate button:hover { background: rgba(80,80,80,.9); }
+.lightbox-rotate span { font-size: 12px; color: #ff9d9d; background: rgba(0,0,0,.7); border-radius: 8px; padding: 4px 8px; }
+/* a rotated picture can overflow its box: keep the controls above it */
+.lightbox-close, .lightbox-nav, .lightbox-info { z-index: 2; }

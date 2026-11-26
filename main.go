@@ -56,6 +56,7 @@ func handleStart() {
 	authPath := cmd.String("auth-file", "", "Require sign-in, using this private users file (see the passwd command)")
 	trustedProxies := cmd.String("trusted-proxies", "", "Proxy addresses allowed to name the visitor in X-Forwarded-For")
 	replicaFrom := cmd.String("replica-from", "", "Addresses that may register replicas without signing in")
+	editsDB := cmd.String("edits-db", "", "Writable database for image rotations (empty = rotation disabled)")
 	groups := cmd.String("groups", "", "Folder groups, e.g. \"Cameras=cam-*;Other=*\"")
 	cmd.Parse(os.Args[2:])
 
@@ -92,6 +93,7 @@ func handleStart() {
 		AuthFile:       *authPath,
 		TrustedProxies: *trustedProxies,
 		ReplicaFrom:    *replicaFrom,
+		EditsDB:        *editsDB,
 		Groups:        *groups,
 		HDSince:       *hdSince,
 		HDFolders:     *hdList,
@@ -138,6 +140,7 @@ func printHelp() {
 	fmt.Println("  -auth-file string  Require sign-in with a login page (default off)")
 	fmt.Println("  -trusted-proxies   Proxies allowed to set X-Forwarded-For")
 	fmt.Println("  -replica-from      Addresses that may register replicas without sign-in")
+	fmt.Println("  -edits-db string   Database for image rotations (default: rotation off)")
 	fmt.Println("  -groups string     Folder groups, e.g. \"Cameras=cam-*;Other=*\" (default none)")
 	fmt.Println("  -hd-since string   HD thumbnails for media dated YYYY-MM or later, or \"all\" (default off)")
 	fmt.Println("  -hd-folders string Comma-separated folders with HD thumbnails for every month")
