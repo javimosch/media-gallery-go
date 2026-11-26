@@ -8,6 +8,7 @@ const FacesView = {
                 <span v-if="status.scanned > 0">in {{ status.scanned.toLocaleString() }} photos
                 · {{ status.progress_pct }}% scanned</span>
                 <span v-if="!similarAvailable">· similar-face search not rebuilt yet, click a face to open its photo</span>
+                <span v-else-if="partial">· similar-face search covers only {{ indexed.toLocaleString() }} faces (tagged “search”), the others open their photo</span>
             </p>
         </div>
         <div class="p-4">
@@ -27,7 +28,8 @@ const FacesView = {
                      class="face-item"
                      @click="selectFace(face)">
                     <img :src="'/api/face-thumb/' + face.id" loading="lazy" draggable="false" @error="onErr">
-                    <div class="face-badge" v-if="face.gender >= 0">
+                    <div class="face-badge" v-if="partial && face.has_embedding">search</div>
+                    <div class="face-badge" v-else-if="face.gender >= 0">
                         {{ face.gender === 0 ? 'F' : 'M' }}{{ face.age > 0 ? ' ' + face.age : '' }}
                     </div>
                 </div>
@@ -79,6 +81,9 @@ const FacesView = {
         const offset = Vue.ref(0);
         const hasMore = Vue.ref(true);
         const similarAvailable = Vue.ref(true);
+        const indexed = Vue.ref(0);
+        const total = Vue.ref(0);
+        const partial = Vue.computed(() => indexed.value > 0 && indexed.value < total.value);
         const selectedFace = Vue.ref(null);
         const similar = Vue.ref([]);
         const thresholdPct = Vue.ref(55);
@@ -97,6 +102,8 @@ const FacesView = {
                 const data = await fetchJSON('/api/faces?limit=60&offset=' + offset.value);
                 faces.value = faces.value.concat(data.faces || []);
                 similarAvailable.value = data.similar_available !== false;
+                indexed.value = data.similar_indexed || 0;
+                total.value = data.total || 0;
                 hasMore.value = (data.faces || []).length === 60;
             } catch (e) {
                 if (e.message.includes('503') || e.message.includes('not enabled')) error.value = 'disabled';
@@ -107,7 +114,7 @@ const FacesView = {
         function loadMore() { offset.value += 60; load(); }
 
         async function selectFace(face) {
-            if (!similarAvailable.value) return openFile(face);
+            if (!face.has_embedding) return openFile(face);
             selectedFace.value = face;
             similar.value = [];
             await searchSimilar();
@@ -158,7 +165,7 @@ const FacesView = {
         Vue.onUnmounted(() => { if (observer) observer.disconnect(); });
         Vue.watch(infiniteScroll, () => setupObserver());
 
-        return { faces, loading, error, status, hasMore, selectedFace, similar, similarAvailable,
+        return { faces, loading, error, status, hasMore, selectedFace, similar, similarAvailable, indexed, partial,
                  thresholdPct, threshold, infiniteScroll,
                  loadMore, selectFace, searchSimilar, openFile, onErr };
     }

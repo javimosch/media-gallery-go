@@ -28,6 +28,8 @@ type FaceRecord struct {
 	Age       int     `json:"age,omitempty"`
 	ThumbPath string  `json:"thumb_path,omitempty"`
 	Similarity float64 `json:"similarity,omitempty"`
+	// set on the recent-faces list only: similar-face search works for this face
+	HasEmbedding bool `json:"has_embedding"`
 }
 
 type FaceScanStatus struct {
@@ -93,7 +95,7 @@ func (f *FaceDB) Status() (*FaceScanStatus, error) {
 func (f *FaceDB) RecentFaces(limit, offset int) ([]FaceRecord, error) {
 	if limit <= 0 || limit > 200 { limit = 50 }
 	rows, err := f.conn.Query(
-		`SELECT id, sha256, relpath, face_idx, bbox, COALESCE(gender,-1), COALESCE(age,-1), COALESCE(thumb_path,'')
+		`SELECT id, sha256, relpath, face_idx, bbox, COALESCE(gender,-1), COALESCE(age,-1), COALESCE(thumb_path,''), length(embedding) > 0
 		 FROM faces WHERE visible(relpath) ORDER BY id DESC LIMIT ? OFFSET ?`,
 		limit, offset)
 	if err != nil { return nil, err }
@@ -213,7 +215,7 @@ func scanFaces(rows *sql.Rows) ([]FaceRecord, error) {
 		var r FaceRecord
 		var bboxStr string
 		var gender, age int
-		rows.Scan(&r.ID, &r.SHA256, &r.RelPath, &r.FaceIdx, &bboxStr, &gender, &age, &r.ThumbPath)
+		rows.Scan(&r.ID, &r.SHA256, &r.RelPath, &r.FaceIdx, &bboxStr, &gender, &age, &r.ThumbPath, &r.HasEmbedding)
 		json.Unmarshal([]byte(bboxStr), &r.BBox)
 		r.Gender = gender
 		r.Age = age
@@ -255,9 +257,10 @@ func (fh *FaceHandler) handleFaces(w http.ResponseWriter, r *http.Request) {
 	}
 	total := 0
 	fh.fdb.conn.QueryRow("SELECT COUNT(*) FROM faces WHERE visible(relpath)").Scan(&total)
-	var embedded bool
-	fh.fdb.conn.QueryRow("SELECT EXISTS(SELECT 1 FROM faces WHERE length(embedding) > 0)").Scan(&embedded)
-	sendJSON(w, map[string]interface{}{"faces": faces, "total": total, "similar_available": embedded})
+	indexed := 0
+	fh.fdb.conn.QueryRow("SELECT COUNT(*) FROM faces WHERE visible(relpath) AND length(embedding) > 0").Scan(&indexed)
+	sendJSON(w, map[string]interface{}{"faces": faces, "total": total,
+		"similar_available": indexed > 0, "similar_indexed": indexed})
 }
 
 func (fh *FaceHandler) handleFaceRoute(w http.ResponseWriter, r *http.Request) {
