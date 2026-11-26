@@ -31,6 +31,8 @@ type ServerConfig struct {
 	AuthPass  string
 	MaxConcurrent int
 	FacesDB   string
+	HDSince   string
+	HDFolders string
 }
 
 type StatusResponse struct {
@@ -68,6 +70,8 @@ func startServer(cfg ServerConfig) {
 	}
 
 	gallery := NewGalleryHandler(db, thumbs, cfg.MediaRoot, faceDB)
+	// refresh the "missing from primary" set at startup + every 10 minutes
+	gallery.StartSourceRefresh(10 * time.Minute)
 
 	mux := http.NewServeMux()
 
@@ -87,7 +91,7 @@ func startServer(cfg ServerConfig) {
 	mux.Handle("/", fileServer)
 
 	// middleware chain
-	handler := Chain(mux,
+	handler := Chain(gallery.WithVisibility(mux),
 		LoggingMiddleware(),
 		AuthMiddleware(cfg.AuthUser, cfg.AuthPass),
 		NewRateLimiter(cfg.MaxConcurrent).Middleware(),

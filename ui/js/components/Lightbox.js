@@ -48,6 +48,9 @@ const Lightbox = {
                     <span v-if="index >= 0 && files.length > 0" class="lightbox-position">
                         &middot; {{ index + 1 }} / {{ files.length }}
                     </span>
+                    <span v-if="file.source === 'replica'" class="replica-badge lightbox-replica-badge" title="Served from replica node">
+                        <i data-lucide="hard-drive" class="w-3 h-3"></i> replica
+                    </span>
                 </div>
                 <div v-if="fastGallery && isImage(file.relpath) && !fullRes" class="lightbox-hint">
                     Press <kbd>Space</kbd> for full resolution
@@ -87,7 +90,7 @@ const Lightbox = {
             if (fastGallery.value && isImage(props.file.relpath)) {
                 imgSrc.value = fullRes.value
                     ? '/api/download/' + props.file.sha256
-                    : '/api/thumb/' + props.file.sha256;
+                    : '/api/thumb/' + props.file.sha256 + '?v=3';
             } else {
                 imgSrc.value = '/api/download/' + props.file.sha256;
             }
@@ -160,14 +163,14 @@ const Lightbox = {
                 const f = props.files[props.index - 1];
                 if (f && isImage(f.relpath)) {
                     const img = new Image();
-                    img.src = '/api/thumb/' + f.sha256;
+                    img.src = '/api/thumb/' + f.sha256 + '?v=3';
                 }
             }
             if (props.index < props.files.length - 1) {
                 const f = props.files[props.index + 1];
                 if (f && isImage(f.relpath)) {
                     const img = new Image();
-                    img.src = '/api/thumb/' + f.sha256;
+                    img.src = '/api/thumb/' + f.sha256 + '?v=3';
                 }
             }
         }

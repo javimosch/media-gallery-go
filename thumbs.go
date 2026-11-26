@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,12 +21,54 @@ import (
 )
 
 const (
-	ThumbSize    = 150
-	ThumbQuality = 60
-	VideoThumbW  = 320
-	VideoThumbH  = 180
 	MaxThumbWorkers = 4 // limit concurrent thumbnail generation to avoid OOM
 )
+
+// HD thumbnail rules, set once at startup (-hd-since, -hd-folders). Media in a
+// YYYY-MM folder gets HD thumbnails if the month is hdSinceMonth or later, or if
+// the folder above it is in hdFolders. Both are empty (off) by default.
+var (
+	hdSinceMonth string
+	hdFolders    map[string]bool
+)
+
+func configureHDThumbs(since, folders string) error {
+	if since != "" && !monthDir.MatchString(since) {
+		return fmt.Errorf("-hd-since must be YYYY-MM, got %q", since)
+	}
+	hdSinceMonth, hdFolders = since, map[string]bool{}
+	for _, f := range strings.Split(folders, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			hdFolders[f] = true
+		}
+	}
+	return nil
+}
+
+type thumbProfile struct {
+	size      int    // keep even: ffmpeg's pad filter fails on odd sizes
+	quality   int    // JPEG quality for the Go fallback encoder
+	qscale    int    // ffmpeg mjpeg qscale for images: lower is better, 2-31
+	videoW    int
+	videoH    int
+	cacheTail string // cache filename suffix, distinct per profile
+}
+
+var (
+	legacyThumb = thumbProfile{150, 60, 60, 320, 180, ".jpg"}
+	hdThumb     = thumbProfile{226, 82, 5, 480, 270, "_v2.jpg"}
+	monthDir    = regexp.MustCompile(`^20\d\d-(0[1-9]|1[0-2])$`)
+)
+
+// profileFor picks settings from the media file's parent month folder.
+func profileFor(fullPath string) thumbProfile {
+	m := filepath.Base(filepath.Dir(fullPath))
+	folder := filepath.Base(filepath.Dir(filepath.Dir(fullPath)))
+	if monthDir.MatchString(m) && (hdFolders[folder] || (hdSinceMonth != "" && m >= hdSinceMonth)) {
+		return hdThumb
+	}
+	return legacyThumb
+}
 
 type ThumbCache struct {
 	dir    string
@@ -65,7 +108,8 @@ func (tc *ThumbCache) Get(sha, fullPath string) ([]byte, error) {
 		return nil, fmt.Errorf("empty sha")
 	}
 
-	p := tc.Path(sha)
+	prof := profileFor(fullPath)
+	p := strings.TrimSuffix(tc.Path(sha), ".jpg") + prof.cacheTail
 
 	// cache hit
 	if data, err := os.ReadFile(p); err == nil {
@@ -105,15 +149,15 @@ func (tc *ThumbCache) Get(sha, fullPath string) ([]byte, error) {
 
 	switch ext {
 	case ".jpg", ".jpeg":
-		data, err = tc.makeImageThumb(fullPath, true)
+		data, err = tc.makeImageThumb(fullPath, true, prof)
 	case ".png":
-		data, err = tc.makeImageThumb(fullPath, false)
+		data, err = tc.makeImageThumb(fullPath, false, prof)
 	case ".bmp", ".tif", ".tiff":
-		data, err = tc.makeImageThumb(fullPath, true)
+		data, err = tc.makeImageThumb(fullPath, true, prof)
 	case ".mp4", ".mov", ".avi", ".mkv", ".wmv":
-		data, err = tc.makeVideoThumb(fullPath, sha)
+		data, err = tc.makeVideoThumb(fullPath, sha, prof)
 	case ".gif":
-		data, err = tc.makeImageThumb(fullPath, true)
+		data, err = tc.makeImageThumb(fullPath, true, prof)
 	default:
 		return nil, fmt.Errorf("unsupported type: %s", ext)
 	}
@@ -127,7 +171,7 @@ func (tc *ThumbCache) Get(sha, fullPath string) ([]byte, error) {
 	return data, nil
 }
 
-func (tc *ThumbCache) makeImageThumb(fullPath string, isJPEG bool) ([]byte, error) {
+func (tc *ThumbCache) makeImageThumb(fullPath string, isJPEG bool, prof thumbProfile) ([]byte, error) {
 	// Use ffmpeg for all image types — it's memory-efficient (streams, doesn't load full image into Go heap)
 	// Unique temp file per call to avoid collisions between concurrent ffmpeg processes
 	rnd := make([]byte, 4)
@@ -137,9 +181,9 @@ func (tc *ThumbCache) makeImageThumb(fullPath string, isJPEG bool) ([]byte, erro
 
 	cmd := exec.Command("ffmpeg",
 		"-i", fullPath,
-		"-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", ThumbSize, ThumbSize, ThumbSize, ThumbSize),
+		"-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", prof.size, prof.size, prof.size, prof.size),
 		"-frames:v", "1",
-		"-q:v", fmt.Sprintf("%d", ThumbQuality),
+		"-q:v", fmt.Sprintf("%d", prof.qscale),
 		"-y",
 		tmpFile)
 	cmd.Stderr = io.Discard
@@ -147,12 +191,12 @@ func (tc *ThumbCache) makeImageThumb(fullPath string, isJPEG bool) ([]byte, erro
 
 	if err := cmd.Run(); err != nil {
 		// fallback to Go image decoding for non-video formats
-		return tc.makeImageThumbGo(fullPath, isJPEG)
+		return tc.makeImageThumbGo(fullPath, isJPEG, prof)
 	}
 	return os.ReadFile(tmpFile)
 }
 
-func (tc *ThumbCache) makeImageThumbGo(fullPath string, isJPEG bool) ([]byte, error) {
+func (tc *ThumbCache) makeImageThumbGo(fullPath string, isJPEG bool, prof thumbProfile) ([]byte, error) {
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return nil, err
@@ -186,16 +230,16 @@ func (tc *ThumbCache) makeImageThumbGo(fullPath string, isJPEG bool) ([]byte, er
 	}
 
 	// use fast approximation scaler instead of CatmullRom (much less memory)
-	thumb := resizeImageFast(img, ThumbSize, ThumbSize)
+	thumb := resizeImageFast(img, prof.size, prof.size)
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: ThumbQuality}); err != nil {
+	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: prof.quality}); err != nil {
 		return nil, fmt.Errorf("encode thumb: %w", err)
 	}
 	return buf.Bytes(), nil
 }
 
-func (tc *ThumbCache) makeVideoThumb(fullPath, sha string) ([]byte, error) {
+func (tc *ThumbCache) makeVideoThumb(fullPath, sha string, prof thumbProfile) ([]byte, error) {
 	tmpFile := filepath.Join(os.TempDir(), "vthumb_"+sha+".jpg")
 	defer os.Remove(tmpFile)
 
@@ -203,7 +247,7 @@ func (tc *ThumbCache) makeVideoThumb(fullPath, sha string) ([]byte, error) {
 		"-ss", "1",
 		"-i", fullPath,
 		"-frames:v", "1",
-		"-vf", fmt.Sprintf("scale=%d:%d", VideoThumbW, VideoThumbH),
+		"-vf", fmt.Sprintf("scale=%d:%d", prof.videoW, prof.videoH),
 		"-q:v", "5",
 		"-y",
 		tmpFile)
@@ -215,7 +259,7 @@ func (tc *ThumbCache) makeVideoThumb(fullPath, sha string) ([]byte, error) {
 			"-ss", "0",
 			"-i", fullPath,
 			"-frames:v", "1",
-			"-vf", fmt.Sprintf("scale=%d:%d", VideoThumbW, VideoThumbH),
+			"-vf", fmt.Sprintf("scale=%d:%d", prof.videoW, prof.videoH),
 			"-q:v", "5",
 			"-y",
 			tmpFile)

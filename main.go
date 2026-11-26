@@ -46,7 +46,14 @@ func handleStart() {
 	authPass := cmd.String("pass", "", "Basic auth password")
 	maxConcurrent := cmd.Int("max-dl", 3, "Max concurrent downloads/streams")
 	facesDB := cmd.String("faces-db", "", "Face recognition SQLite DB (opt-in, empty = disabled)")
+	hdSince := cmd.String("hd-since", "", "HD thumbnails for month folders from YYYY-MM on")
+	hdList := cmd.String("hd-folders", "", "Comma-separated folders that get HD thumbnails for every month")
 	cmd.Parse(os.Args[2:])
+
+	if err := configureHDThumbs(*hdSince, *hdList); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 
 	// validate media root exists
 	if _, err := os.Stat(*mediaRoot); os.IsNotExist(err) {
@@ -68,6 +75,8 @@ func handleStart() {
 		AuthPass:      *authPass,
 		MaxConcurrent: *maxConcurrent,
 		FacesDB:       *facesDB,
+		HDSince:       *hdSince,
+		HDFolders:     *hdList,
 	}
 
 	if *daemon {
@@ -107,6 +116,8 @@ func printHelp() {
 	fmt.Println("  -user string       Basic auth username (empty = no auth)")
 	fmt.Println("  -pass string       Basic auth password")
 	fmt.Println("  -max-dl int        Max concurrent downloads/streams (default 3)")
+	fmt.Println("  -hd-since string   HD thumbnails for month folders from YYYY-MM on (default off)")
+	fmt.Println("  -hd-folders string Comma-separated folders with HD thumbnails for every month")
 	fmt.Println()
 	fmt.Println("API Endpoints:")
 	fmt.Println("  GET /api/browse       Browse files (paginated)")

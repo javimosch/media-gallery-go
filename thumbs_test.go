@@ -25,7 +25,7 @@ func TestThumbCache(t *testing.T) {
 	t.Run("cache hit returns data", func(t *testing.T) {
 		// Create a dummy cached thumbnail
 		sha := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		cachePath := filepath.Join(tmpDir, sha[:2], sha+".jpg")
+		cachePath := tc.Path(sha)
 		os.MkdirAll(filepath.Dir(cachePath), 0755)
 		os.WriteFile(cachePath, []byte("fake-thumb-data"), 0644)
 
@@ -52,7 +52,7 @@ func TestThumbCache(t *testing.T) {
 
 	t.Run("Exists true for cached", func(t *testing.T) {
 		sha := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-		cachePath := filepath.Join(tmpDir, sha[:2], sha+".jpg")
+		cachePath := tc.Path(sha)
 		os.MkdirAll(filepath.Dir(cachePath), 0755)
 		os.WriteFile(cachePath, []byte("data"), 0644)
 		if !tc.Exists(sha) {
@@ -97,7 +97,7 @@ func TestMakeVideoThumbNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := NewThumbCache(tmpDir)
 	// Non-existent video file should return error
-	_, err := tc.makeVideoThumb("/nonexistent/video.mp4", "testsha")
+	_, err := tc.makeVideoThumb("/nonexistent/video.mp4", "testsha", legacyThumb)
 	if err == nil {
 		t.Error("expected error for non-existent video")
 	}
@@ -111,7 +111,7 @@ func TestMakeImageThumbGo(t *testing.T) {
 	img := createTestImage(200, 200)
 	os.WriteFile(imgPath, encodeJPEG(img), 0644)
 
-	_, err := tc.makeImageThumbGo(imgPath, true)
+	_, err := tc.makeImageThumbGo(imgPath, true, legacyThumb)
 	if err != nil {
 		t.Errorf("makeImageThumbGo: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestMakeImageThumbGo(t *testing.T) {
 func TestMakeImageThumbGoNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	tc := NewThumbCache(tmpDir)
-	_, err := tc.makeImageThumbGo("/nonexistent/image.jpg", true)
+	_, err := tc.makeImageThumbGo("/nonexistent/image.jpg", true, legacyThumb)
 	if err == nil {
 		t.Error("expected error for non-existent file")
 	}
@@ -140,7 +140,7 @@ func TestThumbCacheGetWithRealImage(t *testing.T) {
 	if err != nil {
 		t.Logf("Get with real image returned error (expected if no ffmpeg): %v", err)
 		// Try the Go fallback path
-		data, err = tc.makeImageThumbGo(imgPath, true)
+		data, err = tc.makeImageThumbGo(imgPath, true, legacyThumb)
 		if err != nil {
 			t.Skipf("Go fallback also failed: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestMakeImageThumbFFmpeg(t *testing.T) {
 	os.WriteFile(imgPath, encodeJPEG(img), 0644)
 
 	// Try the ffmpeg path
-	data, err := tc.makeImageThumb(imgPath, true)
+	data, err := tc.makeImageThumb(imgPath, true, legacyThumb)
 	if err != nil {
 		t.Logf("makeImageThumb (ffmpeg) failed: %v — this is OK if ffmpeg not installed", err)
 		return

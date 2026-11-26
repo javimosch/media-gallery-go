@@ -31,6 +31,8 @@ func startDaemon(cfg ServerConfig) {
 		fmt.Sprintf("-db=%s", cfg.DBPath),
 		fmt.Sprintf("-thumbs=%s", cfg.ThumbDir),
 		fmt.Sprintf("-max-dl=%d", cfg.MaxConcurrent),
+		"-hd-since=" + cfg.HDSince,
+		"-hd-folders=" + cfg.HDFolders,
 	}
 	if cfg.AuthUser != "" {
 		args = append(args, fmt.Sprintf("-user=%s", cfg.AuthUser))

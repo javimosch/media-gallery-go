@@ -43,10 +43,25 @@ const Sidebar = {
                 </div>
             </div>
         </div>
+        <div class="sidebar-hidden" v-if="stats && stats.hidden_files > 0">
+            {{ stats.hidden_files.toLocaleString() }} files hidden: replica offline
+        </div>
+        <div class="sidebar-replicas" v-if="replicas.length > 0">
+            <div class="sidebar-replicas-header">
+                <i data-lucide="server" class="w-3.5 h-3.5"></i>
+                <span>Replicas</span>
+            </div>
+            <div v-for="rep in replicas" :key="rep.name" class="sidebar-replica">
+                <span class="replica-dot" :class="rep.status"></span>
+                <span class="sidebar-replica-name">{{ rep.name }}</span>
+                <span class="sidebar-replica-files">{{ rep.files?.toLocaleString() }}</span>
+            </div>
+        </div>
     </aside>
     `,
     setup() {
         const stats = Vue.ref(null);
+        const replicas = Vue.ref([]);
         const showSettings = Vue.ref(false);
         const navItems = [
             { id: 'gallery', label: 'Gallery', icon: 'grid-3x3' },
@@ -60,8 +75,20 @@ const Sidebar = {
             try { stats.value = await fetchJSON('/api/stats'); } catch (e) {}
         }
 
-        Vue.onMounted(() => { loadStats(); lucide.createIcons(); });
+        async function loadReplicas() {
+            try {
+                const res = await fetchJSON('/api/replicas');
+                replicas.value = res.replicas || [];
+            } catch (e) { replicas.value = []; }
+        }
+
+        Vue.onMounted(() => {
+            loadStats();
+            loadReplicas();
+            setInterval(loadReplicas, 60000);
+            lucide.createIcons();
+        });
         Vue.onUpdated(() => lucide.createIcons());
-        return { navItems, stats, showSettings, galleryState, formatSize };
+        return { navItems, stats, replicas, showSettings, galleryState, formatSize };
     }
 };

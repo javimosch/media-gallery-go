@@ -4,8 +4,16 @@ const GalleryView = {
         <div class="top-bar">
             <h1>Gallery</h1>
             <label class="junk-toggle">
-                <input type="checkbox" v-model="hideJunk" @change="resetAndLoad" />
-                <span>Hide junk</span>
+                <input type="checkbox" v-model="showPhotos" @change="resetAndLoad" />
+                <span>Show photos</span>
+            </label>
+            <label class="junk-toggle">
+                <input type="checkbox" v-model="showVideos" @change="resetAndLoad" />
+                <span>Show videos</span>
+            </label>
+            <label class="junk-toggle">
+                <input type="checkbox" v-model="showJunk" @change="resetAndLoad" />
+                <span>Show junk</span>
             </label>
             <label class="junk-toggle">
                 <input type="checkbox" v-model="hasFace" @change="resetAndLoad" />
@@ -46,7 +54,9 @@ const GalleryView = {
         const yearMonth = Vue.ref('');
         const categories = Vue.ref([]);
         const yearMonths = Vue.ref([]);
-        const hideJunk = Vue.ref(true);
+        const showPhotos = Vue.ref(true);
+        const showVideos = Vue.ref(true);
+        const showJunk = Vue.ref(false);
         const hasFace = Vue.ref(false);
 
         async function loadCategories() {
@@ -64,16 +74,23 @@ const GalleryView = {
             } catch (e) {}
         }
 
+        // Drops responses from requests started before the last filter change
+        let generation = 0;
+
         async function load() {
+            const gen = generation;
             loading.value = true;
             try {
                 let url = '/api/browse?limit=50';
                 if (category.value) url += '&category=' + encodeURIComponent(category.value);
                 if (yearMonth.value) url += '&ym=' + encodeURIComponent(yearMonth.value);
                 if (cursor.value) url += '&cursor=' + encodeURIComponent(cursor.value);
-                if (hideJunk.value) url += '&hide_junk=1';
+                if (!showPhotos.value) url += '&photos=0';
+                if (!showVideos.value) url += '&videos=0';
+                url += showJunk.value ? '&junk=only' : '&hide_junk=1';
                 if (hasFace.value) url += '&has_face=1';
                 const data = await fetchJSON(url);
+                if (gen !== generation) return;
                 files.value = files.value.concat(data.files || []);
                 cursor.value = data.next_cursor || '';
                 hasMore.value = !!data.next_cursor;
@@ -90,6 +107,7 @@ const GalleryView = {
         }
 
         function resetAndLoad() {
+            generation++;
             files.value = [];
             cursor.value = '';
             hasMore.value = false;
@@ -136,7 +154,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { files, loading, hasMore, category, yearMonth, categories, yearMonths, hideJunk, hasFace,
+        return { files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, shortName, formatYM };
     }
 };

@@ -15,7 +15,7 @@ const ThumbGrid = {
             <div v-for="(file, i) in files" :key="file.sha256 + file.relpath"
                  class="thumb-item"
                  @click="$emit('open-file', file)">
-                <img :src="'/api/thumb/' + file.sha256"
+                <img :src="'/api/thumb/' + file.sha256 + '?v=3'"
                      :alt="file.relpath"
                      loading="lazy"
                      decoding="async"
@@ -23,6 +23,9 @@ const ThumbGrid = {
                      @error="onImgError">
                 <span v-if="isVideo(file.relpath)" class="video-badge">
                     <i data-lucide="play" class="w-3 h-3"></i>
+                </span>
+                <span v-if="file.source === 'replica'" class="replica-badge" title="Served from replica node">
+                    <i data-lucide="hard-drive" class="w-2.5 h-2.5"></i>
                 </span>
             </div>
         </div>

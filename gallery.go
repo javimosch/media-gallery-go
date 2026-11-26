@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type GalleryHandler struct {
@@ -15,10 +17,28 @@ type GalleryHandler struct {
 	thumbs    *ThumbCache
 	mediaRoot string
 	faceDB    *FaceDB
+	replicas  *ReplicaRegistry
+	sources   *SourceTracker
 }
 
 func NewGalleryHandler(db *DB, thumbs *ThumbCache, mediaRoot string, faceDB *FaceDB) *GalleryHandler {
-	return &GalleryHandler{db: db, thumbs: thumbs, mediaRoot: mediaRoot, faceDB: faceDB}
+	return &GalleryHandler{db: db, thumbs: thumbs, mediaRoot: mediaRoot, faceDB: faceDB, replicas: NewReplicaRegistry(), sources: NewSourceTracker()}
+}
+
+// StartSourceRefresh builds the missing-from-primary set in the background
+// and refreshes it periodically.
+func (g *GalleryHandler) StartSourceRefresh(interval time.Duration) {
+	refresh := func() {
+		g.sources.Refresh(g.db, g.mediaRoot)
+	}
+	go func() {
+		refresh()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			refresh()
+		}
+	}()
 }
 
 func (g *GalleryHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -33,6 +53,9 @@ func (g *GalleryHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/thumb/", g.handleThumb)
 	mux.HandleFunc("/api/download/", g.handleDownload)
 	mux.HandleFunc("/api/stream/", g.handleStream)
+	mux.HandleFunc("/api/replicas/register", g.handleReplicaRegister)
+	mux.HandleFunc("/api/replicas", g.handleReplicaList)
+	mux.HandleFunc("/api/replicas/", g.handleReplicaList)
 }
 
 func sendJSON(w http.ResponseWriter, data interface{}) {
@@ -60,10 +83,17 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	hideJunk := r.URL.Query().Get("hide_junk") == "1"
 	hasFace := r.URL.Query().Get("has_face") == "1"
 
-	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB)
+	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
+		JunkOnly:   r.URL.Query().Get("junk") == "only",
+		HidePhotos: r.URL.Query().Get("photos") == "0",
+		HideVideos: r.URL.Query().Get("videos") == "0",
+	})
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return
+	}
+	for i := range result.Files {
+		result.Files[i].Source = g.sources.Source(result.Files[i].RelPath)
 	}
 	sendJSON(w, result)
 }
@@ -79,6 +109,9 @@ func (g *GalleryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return
+	}
+	for i := range files {
+		files[i].Source = g.sources.Source(files[i].RelPath)
 	}
 	sendJSON(w, map[string]interface{}{
 		"query":  q,
@@ -125,6 +158,7 @@ func (g *GalleryHandler) handleStats(w http.ResponseWriter, r *http.Request) {
 		sendError(w, err.Error(), 500)
 		return
 	}
+	stats.HiddenFiles = g.syncVisibility()
 	sendJSON(w, stats)
 }
 
@@ -163,6 +197,7 @@ func (g *GalleryHandler) handleFile(w http.ResponseWriter, r *http.Request) {
 		sendError(w, "file not found", 404)
 		return
 	}
+	file.Source = g.sources.Source(file.RelPath)
 	sendJSON(w, file)
 }
 
@@ -180,18 +215,27 @@ func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
-	data, err := g.thumbs.Get(sha, fullPath)
-	if err != nil {
-		// Don't cache errors — browser will retry on next view
+	if _, statErr := os.Stat(fullPath); statErr == nil {
+		data, err := g.thumbs.Get(sha, fullPath)
+		if err != nil {
+			// Don't cache errors — browser will retry on next view
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusNotFound)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(data)
 		return
 	}
 
-	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.Write(data)
+	// primary miss → try replicas
+	if g.proxyFromReplica(w, r, "thumb", sha) {
+		return
+	}
+	sendError(w, "file not on disk", 404)
 }
 
 func (g *GalleryHandler) handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -208,14 +252,17 @@ func (g *GalleryHandler) handleDownload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
-	stat, err := os.Stat(fullPath)
-	if err != nil {
-		sendError(w, "file not on disk", 404)
+	if stat, err := os.Stat(fullPath); err == nil {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(file.RelPath)))
+		http.ServeContent(w, r, filepath.Base(file.RelPath), stat.ModTime(), openFile(fullPath))
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(file.RelPath)))
-	http.ServeContent(w, r, filepath.Base(file.RelPath), stat.ModTime(), openFile(fullPath))
+	// primary miss → try replicas
+	if g.proxyFromReplica(w, r, "download", sha) {
+		return
+	}
+	sendError(w, "file not on disk", 404)
 }
 
 func (g *GalleryHandler) handleStream(w http.ResponseWriter, r *http.Request) {
@@ -232,26 +279,55 @@ func (g *GalleryHandler) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
-	stat, err := os.Stat(fullPath)
-	if err != nil {
-		sendError(w, "file not on disk", 404)
+	if stat, err := os.Stat(fullPath); err == nil {
+		ext := strings.ToLower(filepath.Ext(file.RelPath))
+		mime := "video/mp4"
+		switch ext {
+		case ".mov":
+			mime = "video/quicktime"
+		case ".avi":
+			mime = "video/x-msvideo"
+		case ".mkv":
+			mime = "video/x-matroska"
+		case ".wmv":
+			mime = "video/x-ms-wmv"
+		}
+		w.Header().Set("Content-Type", mime)
+		http.ServeContent(w, r, filepath.Base(file.RelPath), stat.ModTime(), openFile(fullPath))
 		return
 	}
 
-	ext := strings.ToLower(filepath.Ext(file.RelPath))
-	mime := "video/mp4"
-	switch ext {
-	case ".mov":
-		mime = "video/quicktime"
-	case ".avi":
-		mime = "video/x-msvideo"
-	case ".mkv":
-		mime = "video/x-matroska"
-	case ".wmv":
-		mime = "video/x-ms-wmv"
+	// primary miss → try replicas
+	if g.proxyFromReplica(w, r, "stream", sha) {
+		return
 	}
-	w.Header().Set("Content-Type", mime)
-	http.ServeContent(w, r, filepath.Base(file.RelPath), stat.ModTime(), openFile(fullPath))
+	sendError(w, "file not on disk", 404)
+}
+
+// proxyFromReplica tries each healthy replica in order, streaming the first
+// successful response to the client. Returns true if a replica served the request.
+func (g *GalleryHandler) proxyFromReplica(w http.ResponseWriter, r *http.Request, kind, sha string) bool {
+	for _, rep := range g.replicas.Healthy() {
+		resp, err := g.replicas.ProxyFile(rep, kind, sha, r.Header.Get("Range"))
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		// mark the source so the UI can badge it
+		w.Header().Set("X-Replica-Source", rep.Name)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		// forward content type + content range (video streaming)
+		if ct := resp.Header.Get("Content-Type"); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+		if cr := resp.Header.Get("Content-Range"); cr != "" {
+			w.Header().Set("Content-Range", cr)
+		}
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+		return true
+	}
+	return false
 }
 
 func openFile(path string) *os.File {
