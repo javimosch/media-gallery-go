@@ -87,6 +87,7 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
 		Name:       strings.TrimSpace(r.URL.Query().Get("name")),
 		Group:      r.URL.Query().Get("group"),
+		IncludeJunk:  r.URL.Query().Get("junk") == "include",
 		Device:       deviceFromParam(r.URL.Query().Get("device")),
 		AssignedOnly: r.URL.Query().Get("assigned") == "only",
 		JunkOnly:   r.URL.Query().Get("junk") == "only",
@@ -201,7 +202,7 @@ func (g *GalleryHandler) handleDevices(w http.ResponseWriter, r *http.Request) {
 
 func (g *GalleryHandler) handleYearMonths(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
-	yms, err := g.db.YearMonths(category, r.URL.Query().Get("group"))
+	yms, err := g.db.YearMonths(category, r.URL.Query().Get("group"), deviceFromParam(r.URL.Query().Get("device")))
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return

@@ -4,6 +4,8 @@ const ThumbGrid = {
         loading: Boolean,
         hasMore: Boolean,
         showNames: Boolean,
+        dated: Boolean,     // show each file's date under its thumbnail
+        segmented: Boolean, // headed sections per month (files must be sorted)
     },
     emits: ['load-more', 'open-file'],
     template: `
@@ -12,8 +14,10 @@ const ThumbGrid = {
             <i data-lucide="image-off" class="w-12 h-12 mx-auto mb-4 opacity-40"></i>
             <p class="text-sm">No files found</p>
         </div>
-        <div class="thumb-grid" v-if="files.length > 0">
-            <div v-for="(file, i) in files" :key="file.sha256 + file.relpath"
+        <template v-for="section in sections" :key="section.key">
+        <h2 v-if="segmented" class="month-heading">{{ section.label }}</h2>
+        <div class="thumb-grid">
+            <div v-for="file in section.files" :key="file.sha256 + file.relpath"
                  class="thumb-item"
                  @click="$emit('open-file', file)">
                 <img :src="'/api/thumb/' + file.sha256 + '?v=5'"
@@ -23,6 +27,7 @@ const ThumbGrid = {
                      draggable="false"
                      @error="onImgError">
                 <span v-if="showNames" class="name-caption" :title="file.relpath">{{ file.relpath.split('/').pop() }}</span>
+                <span v-if="dated && dateLabel(file)" class="date-caption">{{ dateLabel(file) }}</span>
                 <span v-if="isVideo(file.relpath)" class="video-badge">
                     <i data-lucide="play" class="w-3 h-3"></i>
                 </span>
@@ -31,6 +36,7 @@ const ThumbGrid = {
                 </span>
             </div>
         </div>
+        </template>
         <div v-if="loading" class="loading-spinner"></div>
         <div v-if="hasMore && !loading && files.length > 0"
              class="scroll-sentinel"
@@ -43,6 +49,29 @@ const ThumbGrid = {
     setup(props, { emit }) {
         const infiniteScroll = Vue.computed(() => galleryState.settings.infiniteScroll);
         let observer = null;
+
+        const sections = Vue.computed(() => {
+            const files = props.files || [];
+            if (!props.segmented) return files.length ? [{ key: 'all', files }] : [];
+            const out = [];
+            for (const f of files) {
+                const month = f.month || '';
+                let last = out[out.length - 1];
+                if (!last || last.key !== month) {
+                    // MM-YY, e.g. 08-26
+                    last = { key: month, label: month ? month.slice(5, 7) + '-' + month.slice(2, 4) : 'No date', files: [] };
+                    out.push(last);
+                }
+                last.files.push(f);
+            }
+            return out;
+        });
+
+        // DD/MM/YY; "--" for the day when only the month is known
+        function dateLabel(f) {
+            const d = f.date || (f.month ? f.month + '---' : '');
+            return d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(2, 4) : '';
+        }
 
         function isVideo(path) {
             return ['mp4', 'mov', 'avi', 'mkv', 'wmv'].includes(path.toLowerCase().split('.').pop());
@@ -88,6 +117,6 @@ const ThumbGrid = {
 
         Vue.watch(infiniteScroll, () => setupObserver());
 
-        return { isVideo, onImgError, infiniteScroll };
+        return { sections, dateLabel, isVideo, onImgError, infiniteScroll };
     }
 };

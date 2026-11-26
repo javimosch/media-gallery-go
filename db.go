@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -23,6 +24,8 @@ type FileRecord struct {
 	SHA256    string `json:"sha256"`
 	ScannedAt int64  `json:"scanned_at"`
 	Source    string `json:"source,omitempty"` // "local" | "replica" (set by handlers)
+	Date      string `json:"date,omitempty"`   // "YYYY-MM-DD HH:MM:SS", see dates.go
+	Month     string `json:"month,omitempty"`  // gallery month, "YYYY-MM"
 }
 
 type BrowseResult struct {
@@ -88,6 +91,7 @@ type MediaFilter struct {
 	Group      string // folder group from -groups
 	AssignedOnly bool // only assigned files, junk included
 	Device       string // camera model, or unknownDevice
+	IncludeJunk  bool   // add junk to what the photo and video choices show
 	// Name keeps files whose filename (not folder) contains it, ignoring case.
 	// A name search also covers junk, so an existing file is never reported missing.
 	Name string
@@ -132,10 +136,14 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 		args = append(args, category)
 	}
 	if yearMonth != "" {
-		conditions = append(conditions, "vpath LIKE '%/' || ? || '/%'")
+		conditions = append(conditions, "month = ?")
 		args = append(args, yearMonth)
 	}
 	for _, m := range media {
+		// with junk added and photos off, the media choice is built with the junk rule
+		if m.IncludeJunk && m.HidePhotos {
+			continue
+		}
 		if c := m.condition(); c != "" {
 			conditions = append(conditions, c)
 		}
@@ -143,7 +151,7 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	// Junk filter: hide images < 50KB, or 50-1000KB images without a detected face.
 	// Videos and images >= 1000KB are never junk.
 	faceSHAs := ""
-	if faceDB != nil && (hideJunk || hasFace || (len(media) > 0 && media[0].JunkOnly)) {
+	if faceDB != nil && (hideJunk || hasFace || (len(media) > 0 && (media[0].JunkOnly || media[0].IncludeJunk))) {
 		faceSHAs = faceDB.faceSHASet()
 	}
 
@@ -177,7 +185,11 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 		conditions = append(conditions, "assigned")
 		hideJunk, junkOnly = false, false
 	}
-	if hideJunk || junkOnly {
+	if filter.IncludeJunk {
+		hideJunk, junkOnly = false, false
+	}
+	junkPlus := filter.IncludeJunk && filter.HidePhotos // junk photos, maybe plus videos
+	if hideJunk || junkOnly || junkPlus {
 		keep := `(
 			NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'
 				OR lower(relpath) LIKE '%.gif' OR lower(relpath) LIKE '%.bmp' OR lower(relpath) LIKE '%.tif' OR lower(relpath) LIKE '%.tiff')
@@ -191,8 +203,11 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 			OR (size >= 51200 AND sha256 IN (` + faceSHAs + `))
 		)`
 		}
-		if junkOnly {
+		if junkOnly || junkPlus {
 			keep = "NOT COALESCE(" + keep + ", 0)"
+		}
+		if junkPlus && !filter.HideVideos {
+			keep = "(" + keep + " OR " + extCondition(videoExts) + ")"
 		}
 		conditions = append(conditions, keep)
 	}
@@ -208,24 +223,28 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	}
 
 	// total count: every filter except the cursor
+	// counted alongside the page query: each one scans the listing
 	var total int
-	d.conn.QueryRow("SELECT COUNT(*) FROM "+d.items+" WHERE "+strings.Join(conditions, " AND "), args...).Scan(&total)
+	var countErr error
+	var counting sync.WaitGroup
+	countSQL, countArgs := "SELECT COUNT(*) FROM "+d.items+" WHERE "+strings.Join(conditions, " AND "), append([]interface{}(nil), args...)
+	counting.Add(1)
+	go func() {
+		defer counting.Done()
+		countErr = d.conn.QueryRow(countSQL, countArgs...).Scan(&total)
+	}()
+	defer counting.Wait()
 
-	// Folder and group views follow the virtual path, so assigned files sort with
-	// their folder. The cursor is always the last file's real path.
-	order, after := "relpath", "relpath > ?"
-	if d.hasAssignments && (category != "" || filter.Group != "") {
-		order = "vpath, relpath"
-		after = "(vpath, relpath) > (SELECT vpath, relpath FROM " + d.items + " WHERE relpath = ?)"
-	}
+	// Newest first; files without a month come last. The cursor is the last
+	// file's real path.
 	if cursor != "" {
-		conditions = append(conditions, after)
+		conditions = append(conditions, "(month, taken, relpath) < (SELECT month, taken, relpath FROM "+d.items+" WHERE relpath = ?)")
 		args = append(args, cursor)
 	}
 	where := " WHERE " + strings.Join(conditions, " AND ")
 
-	query := "SELECT relpath, size, mtime, COALESCE(sha256,''), COALESCE(scanned_at,0) FROM " + d.items +
-		where + " ORDER BY " + order + " LIMIT ?"
+	query := "SELECT relpath, size, mtime, COALESCE(sha256,''), COALESCE(scanned_at,0), taken, month FROM " + d.items +
+		where + " ORDER BY month DESC, taken DESC, relpath DESC LIMIT ?"
 	args = append(args, limit+1)
 
 	rows, err := d.conn.Query(query, args...)
@@ -237,10 +256,14 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	var files []FileRecord
 	for rows.Next() {
 		var f FileRecord
-		rows.Scan(&f.RelPath, &f.Size, &f.Mtime, &f.SHA256, &f.ScannedAt)
+		rows.Scan(&f.RelPath, &f.Size, &f.Mtime, &f.SHA256, &f.ScannedAt, &f.Date, &f.Month)
 		files = append(files, f)
 	}
 
+	counting.Wait()
+	if countErr != nil {
+		return nil, fmt.Errorf("browse count: %w", countErr)
+	}
 	result := &BrowseResult{Total: total}
 	if len(files) > limit {
 		result.NextCursor = files[limit-1].RelPath
@@ -387,10 +410,7 @@ func (d *DB) Categories() ([]string, error) {
 }
 
 func (d *DB) YearMonths(category string, group ...string) ([]string, error) {
-	// Extract the segment after the first '/', filter to valid YYYY-MM format only
-	query := `SELECT DISTINCT substr(vpath, instr(vpath, '/') + 1, 7) AS ym
-		FROM ` + d.items + `
-		WHERE visible(relpath) AND substr(vpath, instr(vpath, '/') + 1, 7) GLOB '20[0-9][0-9]-[0-1][0-9]'`
+	query := `SELECT DISTINCT month FROM ` + d.items + ` WHERE visible(relpath) AND month <> ''`
 	var args []interface{}
 	if category != "" {
 		query += ` AND vpath LIKE ? || '/%'`
@@ -399,6 +419,11 @@ func (d *DB) YearMonths(category string, group ...string) ([]string, error) {
 	if len(group) > 0 && group[0] != "" {
 		query += ` AND folder_group(vpath) = ?`
 		args = append(args, group[0])
+	}
+	if len(group) > 1 && group[1] != "" {
+		c, a := d.deviceCondition(group[1])
+		query += " AND " + c
+		args = append(args, a...)
 	}
 	query += " ORDER BY 1 DESC"
 

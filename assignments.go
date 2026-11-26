@@ -11,7 +11,7 @@ package main
 // Listings read from "items": relpath stays the real file, vpath is where it is
 // shown, and shown is 0 for the extra copies of an assigned file.
 const plainItems = `(SELECT relpath, size, mtime, sha256, scanned_at,
-	relpath AS vpath, 0 AS assigned, 1 AS shown FROM files) AS items`
+	relpath AS vpath, 0 AS assigned, 1 AS shown FROM files)`
 
 const assignedItems = `(SELECT f.relpath AS relpath, f.size AS size, f.mtime AS mtime,
 	f.sha256 AS sha256, f.scanned_at AS scanned_at,
@@ -22,7 +22,7 @@ const assignedItems = `(SELECT f.relpath AS relpath, f.size AS size, f.mtime AS 
 	CASE WHEN a.sha256 IS NULL THEN 1 ELSE
 		f.relpath = (SELECT min(c.relpath) FROM files c WHERE c.sha256 = f.sha256 AND visible(c.relpath))
 	END AS shown
-	FROM files f LEFT JOIN assignments a ON a.sha256 = f.sha256) AS items`
+	FROM files f LEFT JOIN assignments a ON a.sha256 = f.sha256)`
 
 // detectAssignments picks the listing source. It runs when the DB is opened.
 func (d *DB) detectAssignments() error {
@@ -30,10 +30,16 @@ func (d *DB) detectAssignments() error {
 	if err := d.conn.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='assignments'").Scan(&n); err != nil {
 		return err
 	}
-	d.items, d.hasAssignments = plainItems, n > 0
-	if d.hasAssignments {
-		d.items = assignedItems
+	var dates int
+	if err := d.conn.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='media_dates'").Scan(&dates); err != nil {
+		return err
 	}
+	inner := plainItems
+	d.hasAssignments = n > 0
+	if d.hasAssignments {
+		inner = assignedItems
+	}
+	d.items = datedItems(inner, dates > 0)
 	return nil
 }
 

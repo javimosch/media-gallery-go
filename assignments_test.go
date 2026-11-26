@@ -55,14 +55,14 @@ func TestAssignments(t *testing.T) {
 	}
 	// one copy only, ordered by virtual path (2018-01 tiny, then 2021-05), real paths returned
 	got, r := list("cam-old", "", "", 10, false, MediaFilter{})
-	want("folder", got, "photos/2020-03/tiny.jpg other/2020-02/a_copy.jpg")
+	want("folder", got, "other/2020-02/a_copy.jpg photos/2020-03/tiny.jpg")
 	if r.Total != 2 {
 		t.Error("total", r.Total)
 	}
 	got, r = list("", "", "", 2, false, MediaFilter{Group: "Cam"})
-	want("page 1", got, "cam-new/2019-12/n.jpg photos/2020-03/tiny.jpg")
+	want("page 1", got, "other/2020-02/a_copy.jpg cam-new/2019-12/n.jpg")
 	got, _ = list("", "", r.NextCursor, 2, false, MediaFilter{Group: "Cam"})
-	want("page 2", got, "other/2020-02/a_copy.jpg")
+	want("page 2", got, "photos/2020-03/tiny.jpg")
 	got, _ = list("", "", "", 10, false, MediaFilter{Group: "Rest"})
 	want("assigned files leave their old group", got, "photos/2020-01/b.jpg")
 	got, _ = list("", "2021-05", "", 10, false, MediaFilter{})

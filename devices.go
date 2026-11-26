@@ -57,7 +57,7 @@ func (d *DB) DeviceCounts(group, category, yearMonth string) ([]DeviceCount, err
 		args = append(args, category)
 	}
 	if yearMonth != "" {
-		conditions = append(conditions, "vpath LIKE '%/' || ? || '/%'")
+		conditions = append(conditions, "month = ?")
 		args = append(args, yearMonth)
 	}
 	rows, err := d.conn.Query(`SELECT c.model, COALESCE(v.label, c.model), COALESCE(v.type, 'other'), c.n FROM (

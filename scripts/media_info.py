@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Record the camera make and model of each unique file, for the device filter.
+"""Record each unique file's camera make and model (device filter) and capture date.
 
 Usage: media_info.py INVENTORY_DB MEDIA_ROOT [--seed SCAN_TSV]
 
 Only content without a row yet is scanned, so run it again after adding media.
 Files not present under MEDIA_ROOT are left without a row. Reads media headers
-only; writes only the media_info table (and creates an empty devices table,
+only; writes only the media_info and media_dates tables (and creates an empty devices table,
 which can hold readable labels: model, label, type).
 
 SCAN_TSV optionally supplies earlier JPEG results, one file per line:
@@ -13,6 +13,7 @@ sha256, relpath, size, copies, kind, make, model, ...
 """
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -51,6 +52,73 @@ def read(path):
         return "", "", "unsupported"
     except Exception:
         return "", "", "error"
+
+
+def exif_date(value):
+    """EXIF "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS", or ""."""
+    m = re.match(r"((?:19|20)\d\d):(\d\d):(\d\d)(?: (\d\d:\d\d:\d\d))?", str(value or ""))
+    return "%s-%s-%s %s" % (m[1], m[2], m[3], m[4] or "00:00:00") if m else ""
+
+
+def read_date(path):
+    """Return (taken, source) from the file's own metadata."""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        if ext in JPEG:
+            ex = Image.open(path).getexif()
+            taken = exif_date(ex.get_ifd(0x8769).get(36867) or ex.get(306))
+            return taken, "exif" if taken else ""
+        if ext in VIDEO:
+            out = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format_tags=creation_time", "-of", "json", path],
+                capture_output=True, text=True, timeout=60, check=True).stdout
+            value = json.loads(out).get("format", {}).get("tags", {}).get("creation_time", "")
+            if re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", value):
+                return value[:10] + " " + value[11:19], "video"  # UTC
+    except Exception:
+        pass
+    return "", ""
+
+
+def record_dates(db, root, seed_file):
+    db.execute("create table if not exists media_dates(sha256 text primary key, taken text not null, source text not null)")
+    db.commit()
+    done = {s for s, in db.execute("select sha256 from media_dates")}
+    tops = set(os.listdir(root))
+    paths = {}
+    for rel, sha in db.execute("select relpath, sha256 from files order by relpath"):
+        if sha and sha not in done and rel.split("/")[0] in tops:
+            paths.setdefault(sha, rel)
+    seed = {}
+    if seed_file:
+        for line in open(seed_file):
+            f = line.rstrip("\n").split("\t")
+            if f[4] == "jpeg" and f[1].lower().endswith(JPEG):
+                taken = exif_date(f[7])
+                seed[f[0]] = (taken, "exif" if taken else "")
+    pending, count, start = [], 0, time.time()
+
+    def flush():
+        with db:
+            db.executemany("insert into media_dates values(?,?,?)", pending)
+        pending.clear()
+
+    print("dates to record:", len(paths), "from seed:", len(set(paths) & set(seed)), flush=True)
+    for sha, rel in sorted(paths.items(), key=lambda kv: kv[1]):
+        info = seed.get(sha)
+        if info is None:
+            full = os.path.join(root, rel)
+            if not os.path.isfile(full):
+                continue
+            info = read_date(full)
+            count += 1
+            if count % 1000 == 0:
+                print("dates: read", count, "files %.0fs" % (time.time() - start), flush=True)
+        pending.append((sha, *info))
+        if len(pending) >= 500:
+            flush()
+    flush()
+    print("DATES DONE read %d files in %.0fs" % (count, time.time() - start), flush=True)
 
 
 def main():
@@ -98,7 +166,8 @@ def main():
         if len(pending) >= 500:
             flush()
     flush()
-    print("DONE read %d files in %.0fs" % (count, time.time() - start))
+    print("DONE read %d files in %.0fs" % (count, time.time() - start), flush=True)
+    record_dates(db, root, sys.argv[4] if len(sys.argv) > 4 and sys.argv[3] == "--seed" else None)
 
 
 if __name__ == "__main__":

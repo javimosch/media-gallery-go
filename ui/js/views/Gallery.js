@@ -43,7 +43,7 @@ const GalleryView = {
             </div>
             <div class="head-row" v-if="devices.length">
                 <label class="head-label" for="device-select">Device</label>
-                <select id="device-select" class="device-select" v-model="device" @change="resetAndLoad">
+                <select id="device-select" class="device-select" v-model="device" @change="changeDevice">
                     <option value="">Any device</option>
                     <optgroup v-for="g in deviceGroups" :key="g.title" :label="g.title">
                         <option v-for="d in g.items" :key="d.value" :value="d.value">{{ d.label }} ({{ d.count.toLocaleString('en-GB') }})</option>
@@ -74,7 +74,12 @@ const GalleryView = {
             <template v-else-if="!filteredAt">Loading…</template>
             <template v-else><b>{{ total.toLocaleString('en-GB') }}</b> {{ total === 1 ? 'match' : 'matches' }} · filtered {{ filteredAt }} (Paris time)</template>
         </p>
+        <div class="month-nav" v-if="yearMonth && newerMonth && !failed">
+            <button class="load-more-btn month-btn" @click="goMonth(newerMonth)">↑ Next month: {{ formatYM(newerMonth) }}</button>
+        </div>
         <thumb-grid
+            dated
+            :segmented="!yearMonth"
             :files="files"
             :loading="loading"
             :has-more="hasMore"
@@ -82,6 +87,9 @@ const GalleryView = {
             @load-more="loadMore"
             @open-file="openFile"
         ></thumb-grid>
+        <div class="month-nav" v-if="yearMonth && olderMonth && filteredAt && !loading && !hasMore && !failed">
+            <button class="load-more-btn month-btn" @click="goMonth(olderMonth)">↓ Previous month: {{ formatYM(olderMonth) }}</button>
+        </div>
     </div>
     `,
     setup() {
@@ -125,8 +133,25 @@ const GalleryView = {
                 if (device.value && !devices.value.some(d => d.value === device.value)) {
                     device.value = '';
                     resetAndLoad();
+                    loadYearMonths();
                 }
             } catch (e) { console.error(e); }
+        }
+
+        // months are listed newest first; "next" is newer, "previous" is older
+        const newerMonth = Vue.computed(() => yearMonths.value.filter(m => m > yearMonth.value).pop() || '');
+        const olderMonth = Vue.computed(() => yearMonths.value.find(m => m < yearMonth.value) || '');
+
+        function goMonth(ym) {
+            const scroller = document.querySelector('.scroll-container');
+            if (scroller) scroller.scrollTop = 0;
+            window.scrollTo(0, 0);
+            setYearMonth(ym);
+        }
+
+        function changeDevice() {
+            resetAndLoad();
+            loadYearMonths();
         }
 
         const GROUP_KEY = 'mg.group';
@@ -188,12 +213,13 @@ const GalleryView = {
 
         async function loadYearMonths() {
             try {
-                const wanted = category.value + '|' + group.value;
+                const wanted = category.value + '|' + group.value + '|' + device.value;
                 const params = new URLSearchParams();
                 if (category.value) params.set('category', category.value);
                 if (group.value) params.set('group', group.value);
+                if (device.value) params.set('device', device.value);
                 const data = await fetchJSON('/api/yearmonths?' + params);
-                if (wanted !== category.value + '|' + group.value) return;
+                if (wanted !== category.value + '|' + group.value + '|' + device.value) return;
                 yearMonths.value = data.year_months || [];
             } catch (e) {}
         }
@@ -234,7 +260,7 @@ const GalleryView = {
                 if (nameQuery.value.trim()) url += '&name=' + encodeURIComponent(nameQuery.value.trim());
                 if (!showPhotos.value) url += '&photos=0';
                 if (!showVideos.value) url += '&videos=0';
-                url += showJunk.value ? '&junk=only' : '&hide_junk=1';
+                url += showJunk.value ? '&junk=include' : '&hide_junk=1';
                 if (hasFace.value) url += '&has_face=1';
                 if (device.value) url += '&device=' + encodeURIComponent(device.value);
                 const data = await fetchJSON(url);
@@ -316,7 +342,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { devices, device, deviceGroups, filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
+        return { newerMonth, olderMonth, goMonth, changeDevice, devices, device, deviceGroups, filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, formatYM };
     }
 };
