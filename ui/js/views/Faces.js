@@ -4,8 +4,10 @@ const FacesView = {
         <div class="top-bar">
             <h1>Faces</h1>
             <p class="text-xs text-neutral-500 mt-1" v-if="status">
-                {{ status.faces_found?.toLocaleString() }} faces in {{ status.scanned?.toLocaleString() }} photos
-                · {{ status.progress_pct }}% scanned
+                {{ status.faces_found?.toLocaleString() }} faces
+                <span v-if="status.scanned > 0">in {{ status.scanned.toLocaleString() }} photos
+                · {{ status.progress_pct }}% scanned</span>
+                <span v-if="!similarAvailable">· similar-face search not rebuilt yet, click a face to open its photo</span>
             </p>
         </div>
         <div class="p-4">
@@ -76,6 +78,7 @@ const FacesView = {
         const status = Vue.ref(null);
         const offset = Vue.ref(0);
         const hasMore = Vue.ref(true);
+        const similarAvailable = Vue.ref(true);
         const selectedFace = Vue.ref(null);
         const similar = Vue.ref([]);
         const thresholdPct = Vue.ref(55);
@@ -93,6 +96,7 @@ const FacesView = {
             try {
                 const data = await fetchJSON('/api/faces?limit=60&offset=' + offset.value);
                 faces.value = faces.value.concat(data.faces || []);
+                similarAvailable.value = data.similar_available !== false;
                 hasMore.value = (data.faces || []).length === 60;
             } catch (e) {
                 if (e.message.includes('503') || e.message.includes('not enabled')) error.value = 'disabled';
@@ -103,6 +107,7 @@ const FacesView = {
         function loadMore() { offset.value += 60; load(); }
 
         async function selectFace(face) {
+            if (!similarAvailable.value) return openFile(face);
             selectedFace.value = face;
             similar.value = [];
             await searchSimilar();
@@ -153,7 +158,7 @@ const FacesView = {
         Vue.onUnmounted(() => { if (observer) observer.disconnect(); });
         Vue.watch(infiniteScroll, () => setupObserver());
 
-        return { faces, loading, error, status, hasMore, selectedFace, similar,
+        return { faces, loading, error, status, hasMore, selectedFace, similar, similarAvailable,
                  thresholdPct, threshold, infiniteScroll,
                  loadMore, selectFace, searchSimilar, openFile, onErr };
     }

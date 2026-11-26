@@ -211,3 +211,9 @@ func makeEmbedding(vals []float32) []byte {
 	}
 	return buf
 }
+
+func TestCosineSimLengthMismatch(t *testing.T) {
+	if got := cosineSim([]float32{1, 0}, nil); got != 0 {
+		t.Fatalf("got %v", got)
+	}
+}

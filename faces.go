@@ -94,7 +94,7 @@ func (f *FaceDB) RecentFaces(limit, offset int) ([]FaceRecord, error) {
 	if limit <= 0 || limit > 200 { limit = 50 }
 	rows, err := f.conn.Query(
 		`SELECT id, sha256, relpath, face_idx, bbox, COALESCE(gender,-1), COALESCE(age,-1), COALESCE(thumb_path,'')
-		 FROM faces ORDER BY id DESC LIMIT ? OFFSET ?`,
+		 FROM faces WHERE visible(relpath) ORDER BY id DESC LIMIT ? OFFSET ?`,
 		limit, offset)
 	if err != nil { return nil, err }
 	defer rows.Close()
@@ -132,7 +132,7 @@ func (f *FaceDB) Embedding(id int) ([]float32, error) {
 func (f *FaceDB) AllEmbeddings() ([]FaceRecord, [][]float32, error) {
 	rows, err := f.conn.Query(
 		`SELECT id, sha256, relpath, face_idx, bbox, COALESCE(gender,-1), COALESCE(age,-1), COALESCE(thumb_path,''), embedding
-		 FROM faces ORDER BY id`)
+		 FROM faces WHERE visible(relpath) AND length(embedding) > 0 ORDER BY id`)
 	if err != nil { return nil, nil, err }
 	defer rows.Close()
 
@@ -163,6 +163,11 @@ func (f *FaceDB) SearchSimilar(queryID int, threshold float64, limit int) ([]Fac
 	queryEmb, err := f.Embedding(queryID)
 	if err != nil { return nil, fmt.Errorf("get embedding: %w", err) }
 
+	// faces restored from thumbnails have no embedding yet
+	if len(queryEmb) == 0 {
+		return nil, nil
+	}
+
 	faces, embeddings, err := f.AllEmbeddings()
 	if err != nil { return nil, err }
 
@@ -189,6 +194,9 @@ func (f *FaceDB) SearchSimilar(queryID int, threshold float64, limit int) ([]Fac
 }
 
 func cosineSim(a, b []float32) float64 {
+	if len(a) != len(b) {
+		return 0
+	}
 	var dot, na, nb float64
 	for i := range a {
 		dot += float64(a[i]) * float64(b[i])
@@ -246,8 +254,10 @@ func (fh *FaceHandler) handleFaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total := 0
-	fh.fdb.conn.QueryRow("SELECT COUNT(*) FROM faces").Scan(&total)
-	sendJSON(w, map[string]interface{}{"faces": faces, "total": total})
+	fh.fdb.conn.QueryRow("SELECT COUNT(*) FROM faces WHERE visible(relpath)").Scan(&total)
+	var embedded bool
+	fh.fdb.conn.QueryRow("SELECT EXISTS(SELECT 1 FROM faces WHERE length(embedding) > 0)").Scan(&embedded)
+	sendJSON(w, map[string]interface{}{"faces": faces, "total": total, "similar_available": embedded})
 }
 
 func (fh *FaceHandler) handleFaceRoute(w http.ResponseWriter, r *http.Request) {
