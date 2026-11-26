@@ -90,7 +90,7 @@ const Lightbox = {
             if (fastGallery.value && isImage(props.file.relpath)) {
                 imgSrc.value = fullRes.value
                     ? '/api/download/' + props.file.sha256
-                    : '/api/thumb/' + props.file.sha256 + '?v=3';
+                    : '/api/thumb/' + props.file.sha256 + '?v=4';
             } else {
                 imgSrc.value = '/api/download/' + props.file.sha256;
             }
@@ -163,14 +163,14 @@ const Lightbox = {
                 const f = props.files[props.index - 1];
                 if (f && isImage(f.relpath)) {
                     const img = new Image();
-                    img.src = '/api/thumb/' + f.sha256 + '?v=3';
+                    img.src = '/api/thumb/' + f.sha256 + '?v=4';
                 }
             }
             if (props.index < props.files.length - 1) {
                 const f = props.files[props.index + 1];
                 if (f && isImage(f.relpath)) {
                     const img = new Image();
-                    img.src = '/api/thumb/' + f.sha256 + '?v=3';
+                    img.src = '/api/thumb/' + f.sha256 + '?v=4';
                 }
             }
         }

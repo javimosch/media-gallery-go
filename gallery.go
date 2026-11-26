@@ -202,6 +202,28 @@ func (g *GalleryHandler) handleFile(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, file)
 }
 
+// thumbSource picks which copy to build a thumbnail from. Thumbnails are keyed
+// by content, so if any copy is in an HD folder, its HD rule applies.
+func (g *GalleryHandler) thumbSource(sha, fallback string) string {
+	if profileFor(fallback) == hdThumb {
+		return fallback
+	}
+	copies, err := g.db.DupeFiles(sha)
+	if err != nil {
+		return fallback
+	}
+	for _, c := range copies {
+		p := filepath.Join(g.mediaRoot, c.RelPath)
+		if profileFor(p) != hdThumb {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return fallback
+}
+
 func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 	sha := strings.TrimPrefix(r.URL.Path, "/api/thumb/")
 	if sha == "" || len(sha) != 64 {
@@ -217,7 +239,7 @@ func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
 	if _, statErr := os.Stat(fullPath); statErr == nil {
-		data, err := g.thumbs.Get(sha, fullPath)
+		data, err := g.thumbs.Get(sha, g.thumbSource(sha, fullPath))
 		if err != nil {
 			// Don't cache errors — browser will retry on next view
 			w.Header().Set("Content-Type", "image/jpeg")

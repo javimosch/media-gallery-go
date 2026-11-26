@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestProfileFor(t *testing.T) {
 	t.Cleanup(func() { configureHDThumbs("", "") })
@@ -23,5 +27,26 @@ func TestProfileFor(t *testing.T) {
 
 	if configureHDThumbs("june", "") == nil {
 		t.Error("expected an error for a bad month")
+	}
+}
+
+func TestThumbSourcePrefersHDCopy(t *testing.T) {
+	t.Cleanup(func() { configureHDThumbs("", "") })
+	g, _ := setupTestGallery(t)
+	files, err := g.db.Browse("", "", "", 1, false, false, nil)
+	if err != nil || len(files.Files) == 0 {
+		t.Fatal("no files", err)
+	}
+	f := files.Files[0]
+	full := filepath.Join(g.mediaRoot, f.RelPath)
+	os.MkdirAll(filepath.Dir(full), 0755)
+	os.WriteFile(full, []byte("x"), 0644)
+	// the only HD copy is f; the fallback is some other, non-HD path
+	configureHDThumbs("", filepath.Base(filepath.Dir(filepath.Dir(full))))
+	if profileFor(full) != hdThumb {
+		t.Skip("fixture is not folder/YYYY-MM/file")
+	}
+	if got := g.thumbSource(f.SHA256, "/elsewhere/a.jpg"); got != full {
+		t.Fatalf("got %s want %s", got, full)
 	}
 }
