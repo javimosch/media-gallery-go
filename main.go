@@ -24,6 +24,11 @@ func main() {
 		handleStop()
 	case "status":
 		handleStatus()
+	case "passwd":
+		if err := handlePasswd(os.Args[2:], os.Stdin); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
 	case "version":
 		fmt.Printf("media-gallery-go v%s\n", Version)
 	case "help", "--help", "-h":
@@ -48,6 +53,9 @@ func handleStart() {
 	facesDB := cmd.String("faces-db", "", "Face recognition SQLite DB (opt-in, empty = disabled)")
 	hdSince := cmd.String("hd-since", "", "HD thumbnails for month folders from YYYY-MM on")
 	hdList := cmd.String("hd-folders", "", "Comma-separated folders that get HD thumbnails for every month")
+	authPath := cmd.String("auth-file", "", "Require sign-in, using this private users file (see the passwd command)")
+	trustedProxies := cmd.String("trusted-proxies", "", "Proxy addresses allowed to name the visitor in X-Forwarded-For")
+	replicaFrom := cmd.String("replica-from", "", "Addresses that may register replicas without signing in")
 	groups := cmd.String("groups", "", "Folder groups, e.g. \"Cameras=cam-*;Other=*\"")
 	cmd.Parse(os.Args[2:])
 
@@ -81,6 +89,9 @@ func handleStart() {
 		AuthPass:      *authPass,
 		MaxConcurrent: *maxConcurrent,
 		FacesDB:       *facesDB,
+		AuthFile:       *authPath,
+		TrustedProxies: *trustedProxies,
+		ReplicaFrom:    *replicaFrom,
 		Groups:        *groups,
 		HDSince:       *hdSince,
 		HDFolders:     *hdList,
@@ -111,6 +122,7 @@ func printHelp() {
 	fmt.Println("  start       Start HTTP server with web UI")
 	fmt.Println("  stop        Stop daemon server")
 	fmt.Println("  status      Check daemon status")
+	fmt.Println("  passwd      Set a user's password in an auth file (read from stdin)")
 	fmt.Println("  version     Show version information")
 	fmt.Println("  help        Show this help message")
 	fmt.Println()
@@ -123,6 +135,9 @@ func printHelp() {
 	fmt.Println("  -user string       Basic auth username (empty = no auth)")
 	fmt.Println("  -pass string       Basic auth password")
 	fmt.Println("  -max-dl int        Max concurrent downloads/streams (default 3)")
+	fmt.Println("  -auth-file string  Require sign-in with a login page (default off)")
+	fmt.Println("  -trusted-proxies   Proxies allowed to set X-Forwarded-For")
+	fmt.Println("  -replica-from      Addresses that may register replicas without sign-in")
 	fmt.Println("  -groups string     Folder groups, e.g. \"Cameras=cam-*;Other=*\" (default none)")
 	fmt.Println("  -hd-since string   HD thumbnails for month folders from YYYY-MM on (default off)")
 	fmt.Println("  -hd-folders string Comma-separated folders with HD thumbnails for every month")

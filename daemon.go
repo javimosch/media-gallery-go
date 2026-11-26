@@ -32,6 +32,9 @@ func startDaemon(cfg ServerConfig) {
 		fmt.Sprintf("-thumbs=%s", cfg.ThumbDir),
 		fmt.Sprintf("-max-dl=%d", cfg.MaxConcurrent),
 		"-groups=" + cfg.Groups,
+		"-auth-file=" + cfg.AuthFile,
+		"-trusted-proxies=" + cfg.TrustedProxies,
+		"-replica-from=" + cfg.ReplicaFrom,
 		"-hd-since=" + cfg.HDSince,
 		"-hd-folders=" + cfg.HDFolders,
 	}

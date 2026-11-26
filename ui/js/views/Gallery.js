@@ -4,6 +4,7 @@ const GalleryView = {
         <div class="top-bar gallery-head" :style="accentStyle">
             <div class="head-title">
                 <h1>Gallery</h1>
+                <button v-if="signedInAs" class="sign-out" @click="signOut">{{ signedInAs }} · Sign out</button>
             </div>
             <div class="group-bar" v-if="groups.length" role="group" aria-label="Category">
                 <button class="group-btn" :aria-pressed="!group" @click="setGroup('')">
@@ -152,6 +153,20 @@ const GalleryView = {
         function changeDevice() {
             resetAndLoad();
             loadYearMonths();
+        }
+
+        // only when the server requires sign-in; otherwise /auth/me does not exist
+        const signedInAs = Vue.ref('');
+        fetch('/auth/me', { cache: 'no-store' })
+            .then(res => res.ok ? res.json() : null)
+            .then(me => { signedInAs.value = (me && me.user) || ''; })
+            .catch(() => {});
+
+        async function signOut() {
+            try {
+                const res = await fetch('/auth/logout', { method: 'POST' });
+                if (res.ok || res.status === 401) location.replace('/login');
+            } catch (e) { console.error(e); }
         }
 
         const GROUP_KEY = 'mg.group';
@@ -342,7 +357,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { newerMonth, olderMonth, goMonth, changeDevice, devices, device, deviceGroups, filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
+        return { signedInAs, signOut, newerMonth, olderMonth, goMonth, changeDevice, devices, device, deviceGroups, filteredAt, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, formatYM };
     }
 };

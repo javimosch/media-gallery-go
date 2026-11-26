@@ -33,6 +33,9 @@ type ServerConfig struct {
 	FacesDB   string
 	HDSince   string
 	Groups    string
+	AuthFile       string
+	TrustedProxies string
+	ReplicaFrom    string
 	HDFolders string
 }
 
@@ -92,12 +95,26 @@ func startServer(cfg ServerConfig) {
 	mux.Handle("/", fileServer)
 
 	// middleware chain
+	logging := LoggingMiddleware()
+	if cfg.AuthFile != "" {
+		logging = func(next http.Handler) http.Handler { return next }
+	}
 	handler := Chain(gallery.WithVisibility(mux),
-		LoggingMiddleware(),
+		logging,
 		AuthMiddleware(cfg.AuthUser, cfg.AuthPass),
 		NewRateLimiter(cfg.MaxConcurrent).Middleware(),
 		CacheMiddleware(3600),
 	)
+
+	// Sign-in goes outermost. A bad auth file stops the server: never run open.
+	if cfg.AuthFile != "" {
+		auth, err := NewAuth(cfg.AuthFile, cfg.TrustedProxies, cfg.ReplicaFrom)
+		if err != nil {
+			log.Fatalf("Sign-in setup failed: %v", err)
+		}
+		handler = LoggingMiddleware()(auth.Wrap(handler))
+		log.Printf("Sign-in: required (%d users)", len(auth.users))
+	}
 
 	serverStatus = StatusResponse{
 		Status:    "running",

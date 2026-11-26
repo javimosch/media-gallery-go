@@ -25,6 +25,8 @@ Vue.watch(() => galleryState.settings, (val) => {
 
 async function fetchJSON(url) {
     const res = await fetch(url, { cache: 'no-cache' });
+    // the session ended: show the login page
+    if (res.status === 401) location.replace('/login');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
 }

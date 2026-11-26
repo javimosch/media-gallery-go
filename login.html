@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="robots" content="noindex">
+<title>Sign in · Media Gallery</title>
+<style>
+:root{color-scheme:dark;--bg:#0a0a0a;--panel:#12161b;--line:#262d36;--ink:#eef1f4;--mute:#8b96a3;--acc:#7aa2ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px 16px;color:var(--ink);font:15px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;
+ background:radial-gradient(60rem 40rem at 15% -10%,#f2a36b22,transparent 60%),radial-gradient(60rem 40rem at 110% 110%,#5fd0b522,transparent 60%),var(--bg)}
+main{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:30px 24px;box-shadow:0 24px 60px #0008}
+svg{display:block;margin:0 auto 14px;color:var(--acc)}
+h1{text-align:center;font-size:22px;letter-spacing:-.02em}
+p.sub{text-align:center;color:var(--mute);margin:4px 0 22px}
+label{display:block;font-size:13px;color:var(--mute);margin:14px 0 6px}
+input[type=text],input[type=password]{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:13px 14px;font:inherit;font-size:16px}
+input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.show{display:flex;align-items:center;gap:9px;margin:12px 0 0;padding:6px 0;color:var(--ink);cursor:pointer}
+.show input{width:18px;height:18px;accent-color:var(--acc)}
+button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:12px;background:var(--acc);color:#08101f;font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+#msg{min-height:22px;margin-top:12px;text-align:center;color:#ff9d9d;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="14" height="14" rx="2"/><path d="M3 7v12a2 2 0 0 0 2 2h12"/><circle cx="12" cy="8" r="1.4"/><path d="m21 13-4-4-8 8"/></svg>
+  <h1>Media Gallery</h1>
+  <p class="sub">Sign in to see your photos and videos</p>
+  <form id="f" method="post" action="/auth/login">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    <label class="show"><input type="checkbox" id="show"> Show password</label>
+    <button id="go" type="submit">Sign in</button>
+    <p id="msg" role="alert"></p>
+  </form>
+  <noscript><p class="sub">JavaScript is needed to sign in.</p></noscript>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let timer = null;
+$('show').addEventListener('change', e => { $('password').type = e.target.checked ? 'text' : 'password'; });
+function wait(seconds) {
+  clearInterval(timer);
+  $('go').disabled = true;
+  const tick = () => {
+    if (seconds <= 0) { clearInterval(timer); $('go').disabled = false; $('msg').textContent = ''; return; }
+    $('msg').textContent = 'Too many attempts. Try again in ' + seconds-- + ' s.';
+  };
+  tick();
+  timer = setInterval(tick, 1000);
+}
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('go').disabled = true;
+  $('msg').textContent = '';
+  try {
+    const res = await fetch('/auth/login', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: $('username').value, password: $('password').value }) });
+    if (res.ok) { location.replace('/'); return; }
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 429) { wait(data.retry_after || 60); return; }
+    $('msg').textContent = res.status === 401 ? 'Wrong username or password.' : 'Could not sign in. Try again.';
+  } catch (err) {
+    $('msg').textContent = 'No connection. Try again.';
+  }
+  $('go').disabled = false;
+});
+</script>
+</body>
+</html>

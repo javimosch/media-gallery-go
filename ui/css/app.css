@@ -731,3 +731,6 @@ input[type="range"]::-webkit-slider-thumb {
 .month-btn { margin: 8px auto; display: block; }
 .month-nav + .month-nav { margin-bottom: 80px; }
 .thumb-grid + .month-nav, .month-nav:last-child { padding-bottom: 80px; }
+
+.sign-out { margin-left: auto; font-size: 13px; color: #8b96a3; border: 1px solid #2a2a2a; border-radius: 10px; padding: 6px 12px; cursor: pointer; }
+.sign-out:hover { color: #eef1f4; border-color: #555; }
