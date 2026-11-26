@@ -4,7 +4,6 @@ const GalleryView = {
         <div class="top-bar gallery-head" :style="accentStyle">
             <div class="head-title">
                 <h1>Gallery</h1>
-                <span class="head-count" aria-live="polite">{{ failed ? 'Could not load, try again' : loading && !files.length ? 'Loading…' : total.toLocaleString() + (nameQuery.trim() ? ' match(es)' : ' files') }}</span>
             </div>
             <div class="group-bar" v-if="groups.length" role="group" aria-label="Category">
                 <button class="group-btn" :aria-pressed="!group" @click="setGroup('')">
@@ -65,6 +64,11 @@ const GalleryView = {
                 </label>
             </div>
         </div>
+        <p class="result-bar" aria-live="polite">
+            <template v-if="failed">Could not load results, try again</template>
+            <template v-else-if="!filteredAt">Loading…</template>
+            <template v-else><b>{{ total.toLocaleString('en-GB') }}</b> {{ total === 1 ? 'match' : 'matches' }} · filtered {{ filteredAt }} (Paris time)</template>
+        </p>
         <thumb-grid
             :files="files"
             :loading="loading"
@@ -163,9 +167,16 @@ const GalleryView = {
         const nameQuery = Vue.ref('');
         const total = Vue.ref(0);
         const failed = Vue.ref(false);
+        // when the current filter's results arrived; empty while they load
+        const filteredAt = Vue.ref('');
+        const parisTime = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/Paris', day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        });
         let typingTimer = null;
 
         function onNameInput() {
+            filteredAt.value = '';
             // invalidate in-flight results at once so no stale count is shown
             generation++;
             loading.value = true;
@@ -195,6 +206,7 @@ const GalleryView = {
                 const data = await fetchJSON(url);
                 if (gen !== generation) return;
                 total.value = data.total || 0;
+                if (!filteredAt.value) filteredAt.value = parisTime.format(new Date());
                 files.value = files.value.concat(data.files || []);
                 cursor.value = data.next_cursor || '';
                 hasMore.value = !!data.next_cursor;
@@ -216,6 +228,7 @@ const GalleryView = {
 
         function resetAndLoad() {
             generation++;
+            filteredAt.value = '';
             files.value = [];
             cursor.value = '';
             hasMore.value = false;
@@ -266,7 +279,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { hasAssignments, assignedOnly, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
+        return { filteredAt, hasAssignments, assignedOnly, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, formatYM };
     }
 };

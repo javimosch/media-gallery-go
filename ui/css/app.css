@@ -717,3 +717,6 @@ input[type="range"]::-webkit-slider-thumb {
 .gallery-head .chip small { margin-left: 6px; opacity: .65; font-variant-numeric: tabular-nums; }
 .gallery-head .chip.active { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: #eef1f4; }
 .gallery-head input[type="checkbox"] { accent-color: var(--accent); }
+
+.result-bar { padding: 10px 16px 6px; font-size: 13px; color: #8b96a3; font-variant-numeric: tabular-nums; }
+.result-bar b { color: #eef1f4; font-size: 15px; }
