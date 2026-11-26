@@ -75,6 +75,7 @@ type MediaFilter struct {
 	HidePhotos bool
 	HideVideos bool
 	JunkOnly   bool // list only what the junk filter would hide
+	Group      string // folder group from -groups
 	// Name keeps files whose filename (not folder) contains it, ignoring case.
 	// A name search also covers junk, so an existing file is never reported missing.
 	Name string
@@ -134,6 +135,10 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 		faceSHAs = faceDB.faceSHASet()
 	}
 
+	if len(media) > 0 && media[0].Group != "" {
+		conditions = append(conditions, "folder_group(relpath) = ?")
+		args = append(args, media[0].Group)
+	}
 	junkOnly := len(media) > 0 && media[0].JunkOnly
 	if len(media) > 0 && media[0].Name != "" {
 		// The filename is relpath minus everything up to the last '/'. instr, not
@@ -344,7 +349,7 @@ func (d *DB) Categories() ([]string, error) {
 	return cats, nil
 }
 
-func (d *DB) YearMonths(category string) ([]string, error) {
+func (d *DB) YearMonths(category string, group ...string) ([]string, error) {
 	// Extract the segment after the first '/', filter to valid YYYY-MM format only
 	query := `SELECT DISTINCT substr(relpath, instr(relpath, '/') + 1, 7) AS ym
 		FROM files
@@ -353,6 +358,10 @@ func (d *DB) YearMonths(category string) ([]string, error) {
 	if category != "" {
 		query += ` AND relpath LIKE ? || '/%'`
 		args = append(args, category)
+	}
+	if len(group) > 0 && group[0] != "" {
+		query += ` AND folder_group(relpath) = ?`
+		args = append(args, group[0])
 	}
 	query += " ORDER BY 1 DESC"
 

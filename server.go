@@ -32,6 +32,7 @@ type ServerConfig struct {
 	MaxConcurrent int
 	FacesDB   string
 	HDSince   string
+	Groups    string
 	HDFolders string
 }
 

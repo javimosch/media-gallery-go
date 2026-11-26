@@ -85,6 +85,7 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 
 	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
 		Name:       strings.TrimSpace(r.URL.Query().Get("name")),
+		Group:      r.URL.Query().Get("group"),
 		JunkOnly:   r.URL.Query().Get("junk") == "only",
 		HidePhotos: r.URL.Query().Get("photos") == "0",
 		HideVideos: r.URL.Query().Get("videos") == "0",
@@ -169,12 +170,25 @@ func (g *GalleryHandler) handleCategories(w http.ResponseWriter, r *http.Request
 		sendError(w, err.Error(), 500)
 		return
 	}
-	sendJSON(w, map[string]interface{}{"categories": cats})
+	resp := map[string]interface{}{"categories": cats}
+	if len(groupRules) > 0 {
+		counts, err := g.db.FolderCounts()
+		if err != nil {
+			sendError(w, err.Error(), 500)
+			return
+		}
+		total := 0
+		for _, f := range counts {
+			total += f.Count
+		}
+		resp["groups"], resp["total"] = groupFolders(counts), total
+	}
+	sendJSON(w, resp)
 }
 
 func (g *GalleryHandler) handleYearMonths(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
-	yms, err := g.db.YearMonths(category)
+	yms, err := g.db.YearMonths(category, r.URL.Query().Get("group"))
 	if err != nil {
 		sendError(w, err.Error(), 500)
 		return

@@ -48,7 +48,13 @@ func handleStart() {
 	facesDB := cmd.String("faces-db", "", "Face recognition SQLite DB (opt-in, empty = disabled)")
 	hdSince := cmd.String("hd-since", "", "HD thumbnails for month folders from YYYY-MM on")
 	hdList := cmd.String("hd-folders", "", "Comma-separated folders that get HD thumbnails for every month")
+	groups := cmd.String("groups", "", "Folder groups, e.g. \"Cameras=cam-*;Other=*\"")
 	cmd.Parse(os.Args[2:])
+
+	if err := configureGroups(*groups); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 
 	if err := configureHDThumbs(*hdSince, *hdList); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -75,6 +81,7 @@ func handleStart() {
 		AuthPass:      *authPass,
 		MaxConcurrent: *maxConcurrent,
 		FacesDB:       *facesDB,
+		Groups:        *groups,
 		HDSince:       *hdSince,
 		HDFolders:     *hdList,
 	}
@@ -116,6 +123,7 @@ func printHelp() {
 	fmt.Println("  -user string       Basic auth username (empty = no auth)")
 	fmt.Println("  -pass string       Basic auth password")
 	fmt.Println("  -max-dl int        Max concurrent downloads/streams (default 3)")
+	fmt.Println("  -groups string     Folder groups, e.g. \"Cameras=cam-*;Other=*\" (default none)")
 	fmt.Println("  -hd-since string   HD thumbnails for month folders from YYYY-MM on (default off)")
 	fmt.Println("  -hd-folders string Comma-separated folders with HD thumbnails for every month")
 	fmt.Println()
