@@ -27,14 +27,17 @@ const (
 // HD thumbnail rules, set once at startup (-hd-since, -hd-folders). Media in a
 // YYYY-MM folder gets HD thumbnails if the month is hdSinceMonth or later, or if
 // the folder above it is in hdFolders. Both are empty (off) by default.
+// hdAll as -hd-since means every file, dated or not.
+const hdAll = "all"
+
 var (
 	hdSinceMonth string
 	hdFolders    map[string]bool
 )
 
 func configureHDThumbs(since, folders string) error {
-	if since != "" && !monthDir.MatchString(since) {
-		return fmt.Errorf("-hd-since must be YYYY-MM, got %q", since)
+	if since != "" && since != hdAll && !monthDir.MatchString(since) {
+		return fmt.Errorf("-hd-since must be YYYY-MM or all, got %q", since)
 	}
 	hdSinceMonth, hdFolders = since, map[string]bool{}
 	for _, f := range strings.Split(folders, ",") {
@@ -247,20 +250,13 @@ func (tc *ThumbCache) makeVideoThumb(fullPath, sha string, prof thumbProfile) ([
 	tmpFile := filepath.Join(os.TempDir(), "vthumb_"+sha+".jpg")
 	defer os.Remove(tmpFile)
 
-	cmd := exec.Command("ffmpeg",
-		"-ss", "1",
-		"-i", fullPath,
-		"-frames:v", "1",
-		"-vf", fmt.Sprintf("scale=%d:%d", prof.videoW, prof.videoH),
-		"-q:v", "5",
-		"-y",
-		tmpFile)
-	cmd.Stderr = io.Discard
-	cmd.Stdout = io.Discard
-
-	if err := cmd.Run(); err != nil {
-		cmd = exec.Command("ffmpeg",
-			"-ss", "0",
+	// One second in, else the first frame. For clips shorter than that, ffmpeg
+	// can exit successfully without writing anything, so check the file too.
+	var lastErr error
+	for _, at := range []string{"1", "0"} {
+		os.Remove(tmpFile)
+		cmd := exec.Command("ffmpeg",
+			"-ss", at,
 			"-i", fullPath,
 			"-frames:v", "1",
 			"-vf", fmt.Sprintf("scale=%d:%d", prof.videoW, prof.videoH),
@@ -269,11 +265,15 @@ func (tc *ThumbCache) makeVideoThumb(fullPath, sha string, prof thumbProfile) ([
 			tmpFile)
 		cmd.Stderr = io.Discard
 		cmd.Stdout = io.Discard
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("ffmpeg: %w", err)
+		if lastErr = cmd.Run(); lastErr != nil {
+			continue
 		}
+		if data, err := os.ReadFile(tmpFile); err == nil && len(data) > 0 {
+			return data, nil
+		}
+		lastErr = fmt.Errorf("no frame at %ss", at)
 	}
-	return os.ReadFile(tmpFile)
+	return nil, fmt.Errorf("ffmpeg: %w", lastErr)
 }
 
 func resizeImageFast(src image.Image, maxW, maxH int) image.Image {

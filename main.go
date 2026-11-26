@@ -139,7 +139,7 @@ func printHelp() {
 	fmt.Println("  -trusted-proxies   Proxies allowed to set X-Forwarded-For")
 	fmt.Println("  -replica-from      Addresses that may register replicas without sign-in")
 	fmt.Println("  -groups string     Folder groups, e.g. \"Cameras=cam-*;Other=*\" (default none)")
-	fmt.Println("  -hd-since string   HD thumbnails for media dated YYYY-MM or later (default off)")
+	fmt.Println("  -hd-since string   HD thumbnails for media dated YYYY-MM or later, or \"all\" (default off)")
 	fmt.Println("  -hd-folders string Comma-separated folders with HD thumbnails for every month")
 	fmt.Println()
 	fmt.Println("API Endpoints:")

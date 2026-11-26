@@ -255,7 +255,7 @@ func (g *GalleryHandler) thumbSource(sha, fallback string) string {
 // wantsHD reports whether content gets HD thumbnails whatever its path: it is
 // assigned, or its gallery month is -hd-since or later.
 func (g *GalleryHandler) wantsHD(sha string) bool {
-	if g.db.IsAssigned(sha) {
+	if hdSinceMonth == hdAll || g.db.IsAssigned(sha) {
 		return true
 	}
 	return hdSinceMonth != "" && g.db.GalleryMonth(sha) >= hdSinceMonth

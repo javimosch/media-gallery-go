@@ -24,7 +24,7 @@ const DupesView = {
                     <div v-if="expanded === group.sha256" class="thumb-grid mt-3">
                         <div v-for="file in groupFiles" :key="file.relpath"
                              class="thumb-item" @click="openFile(file)">
-                            <img :src="'/api/thumb/' + file.sha256 + '?v=6'" loading="lazy" draggable="false" @error="onErr">
+                            <img :src="'/api/thumb/' + file.sha256 + '?v=7'" loading="lazy" draggable="false" @error="onErr">
                         </div>
                     </div>
                 </div>

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -73,5 +74,31 @@ func TestWantsHDByMediaDate(t *testing.T) {
 	configureHDThumbs("2031-01", "")
 	if g.wantsHD(sha) || g.wantsHD("unknown") {
 		t.Error("older or unknown content")
+	}
+}
+
+func TestHDAll(t *testing.T) {
+	t.Cleanup(func() { configureHDThumbs("", "") })
+	g, _ := setupTestGallery(t)
+	if err := configureHDThumbs("all", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !g.wantsHD("unknown") {
+		t.Error("all must cover undated content")
+	}
+}
+
+func TestShortVideoThumb(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("no ffmpeg")
+	}
+	dir := t.TempDir()
+	clip := filepath.Join(dir, "short.mp4")
+	if out, err := exec.Command("ffmpeg", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25", "-t", "0.5", "-pix_fmt", "yuv420p", clip).CombinedOutput(); err != nil {
+		t.Skipf("cannot make a test clip: %v %s", err, out)
+	}
+	data, err := NewThumbCache(filepath.Join(dir, "t")).makeVideoThumb(clip, "short-clip-test", hdThumb)
+	if err != nil || len(data) == 0 {
+		t.Fatalf("no thumbnail for a 0.5s clip: %v", err)
 	}
 }
