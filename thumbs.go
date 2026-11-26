@@ -103,12 +103,16 @@ func (tc *ThumbCache) Exists(sha string) bool {
 	return err == nil
 }
 
-func (tc *ThumbCache) Get(sha, fullPath string) ([]byte, error) {
+// Get returns the cached or new thumbnail. forceHD overrides the path rule.
+func (tc *ThumbCache) Get(sha, fullPath string, forceHD ...bool) ([]byte, error) {
 	if sha == "" {
 		return nil, fmt.Errorf("empty sha")
 	}
 
 	prof := profileFor(fullPath)
+	if len(forceHD) > 0 && forceHD[0] {
+		prof = hdThumb
+	}
 	p := strings.TrimSuffix(tc.Path(sha), ".jpg") + prof.cacheTail
 
 	// cache hit

@@ -11,6 +11,8 @@ import (
 
 type DB struct {
 	conn *sql.DB
+	items          string // listing source, see assignments.go
+	hasAssignments bool
 }
 
 type FileRecord struct {
@@ -62,7 +64,11 @@ func OpenDB(path string) (*DB, error) {
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
-	return &DB{conn: conn}, nil
+	d := &DB{conn: conn}
+	if err := d.detectAssignments(); err != nil {
+		return nil, fmt.Errorf("check assignments: %w", err)
+	}
+	return d, nil
 }
 
 func (d *DB) Close() error {
@@ -76,6 +82,7 @@ type MediaFilter struct {
 	HideVideos bool
 	JunkOnly   bool // list only what the junk filter would hide
 	Group      string // folder group from -groups
+	AssignedOnly bool // only assigned files, junk included
 	// Name keeps files whose filename (not folder) contains it, ignoring case.
 	// A name search also covers junk, so an existing file is never reported missing.
 	Name string
@@ -116,11 +123,11 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	conditions = append(conditions, "visible(relpath)")
 
 	if category != "" {
-		conditions = append(conditions, "relpath LIKE ? || '/%'")
+		conditions = append(conditions, "vpath LIKE ? || '/%'")
 		args = append(args, category)
 	}
 	if yearMonth != "" {
-		conditions = append(conditions, "relpath LIKE '%/' || ? || '/%'")
+		conditions = append(conditions, "vpath LIKE '%/' || ? || '/%'")
 		args = append(args, yearMonth)
 	}
 	for _, m := range media {
@@ -136,7 +143,7 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	}
 
 	if len(media) > 0 && media[0].Group != "" {
-		conditions = append(conditions, "folder_group(relpath) = ?")
+		conditions = append(conditions, "folder_group(vpath) = ?")
 		args = append(args, media[0].Group)
 	}
 	junkOnly := len(media) > 0 && media[0].JunkOnly
@@ -145,6 +152,19 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 		// LIKE, so '_' and '%' are literal.
 		conditions = append(conditions, "instr(lower(replace(relpath, rtrim(relpath, replace(relpath, '/', '')), '')), lower(?)) > 0")
 		args = append(args, media[0].Name)
+		hideJunk, junkOnly = false, false
+	}
+	var filter MediaFilter
+	if len(media) > 0 {
+		filter = media[0]
+	}
+	// Extra copies are collapsed, except in a name search: copies can have
+	// different names, and a search must never report an existing name missing.
+	if filter.Name == "" {
+		conditions = append(conditions, "shown")
+	}
+	if filter.AssignedOnly {
+		conditions = append(conditions, "assigned")
 		hideJunk, junkOnly = false, false
 	}
 	if hideJunk || junkOnly {
@@ -179,16 +199,23 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 
 	// total count: every filter except the cursor
 	var total int
-	d.conn.QueryRow("SELECT COUNT(*) FROM files WHERE "+strings.Join(conditions, " AND "), args...).Scan(&total)
+	d.conn.QueryRow("SELECT COUNT(*) FROM "+d.items+" WHERE "+strings.Join(conditions, " AND "), args...).Scan(&total)
 
+	// Folder and group views follow the virtual path, so assigned files sort with
+	// their folder. The cursor is always the last file's real path.
+	order, after := "relpath", "relpath > ?"
+	if d.hasAssignments && (category != "" || filter.Group != "") {
+		order = "vpath, relpath"
+		after = "(vpath, relpath) > (SELECT vpath, relpath FROM " + d.items + " WHERE relpath = ?)"
+	}
 	if cursor != "" {
-		conditions = append(conditions, "relpath > ?")
+		conditions = append(conditions, after)
 		args = append(args, cursor)
 	}
 	where := " WHERE " + strings.Join(conditions, " AND ")
 
-	query := "SELECT relpath, size, mtime, COALESCE(sha256,''), COALESCE(scanned_at,0) FROM files" +
-		where + " ORDER BY relpath LIMIT ?"
+	query := "SELECT relpath, size, mtime, COALESCE(sha256,''), COALESCE(scanned_at,0) FROM " + d.items +
+		where + " ORDER BY " + order + " LIMIT ?"
 	args = append(args, limit+1)
 
 	rows, err := d.conn.Query(query, args...)
@@ -317,8 +344,8 @@ func (d *DB) GetStats() (*Stats, error) {
 
 	// categories
 	rows, err := d.conn.Query(
-		`SELECT substr(relpath, 1, instr(relpath, '/') - 1) AS cat, COUNT(*), SUM(size)
-		 FROM files WHERE visible(relpath) AND instr(relpath, '/') > 0 AND substr(relpath, 1, instr(relpath, '/') - 1) != ''
+		`SELECT substr(vpath, 1, instr(vpath, '/') - 1) AS cat, COUNT(*), SUM(size)
+		 FROM ` + d.items + ` WHERE visible(relpath) AND instr(vpath, '/') > 0 AND substr(vpath, 1, instr(vpath, '/') - 1) != ''
 		 GROUP BY cat ORDER BY SUM(size) DESC`)
 	if err == nil {
 		defer rows.Close()
@@ -334,7 +361,7 @@ func (d *DB) GetStats() (*Stats, error) {
 
 func (d *DB) Categories() ([]string, error) {
 	rows, err := d.conn.Query(
-		"SELECT DISTINCT substr(relpath, 1, instr(relpath, '/') - 1) FROM files WHERE visible(relpath) AND instr(relpath, '/') > 0 AND substr(relpath, 1, instr(relpath, '/') - 1) != '' ORDER BY 1")
+		"SELECT DISTINCT substr(vpath, 1, instr(vpath, '/') - 1) FROM " + d.items + " WHERE visible(relpath) AND instr(vpath, '/') > 0 AND substr(vpath, 1, instr(vpath, '/') - 1) != '' ORDER BY 1")
 	if err != nil {
 		return nil, err
 	}
@@ -351,16 +378,16 @@ func (d *DB) Categories() ([]string, error) {
 
 func (d *DB) YearMonths(category string, group ...string) ([]string, error) {
 	// Extract the segment after the first '/', filter to valid YYYY-MM format only
-	query := `SELECT DISTINCT substr(relpath, instr(relpath, '/') + 1, 7) AS ym
-		FROM files
-		WHERE visible(relpath) AND substr(relpath, instr(relpath, '/') + 1, 7) GLOB '20[0-9][0-9]-[0-1][0-9]'`
+	query := `SELECT DISTINCT substr(vpath, instr(vpath, '/') + 1, 7) AS ym
+		FROM ` + d.items + `
+		WHERE visible(relpath) AND substr(vpath, instr(vpath, '/') + 1, 7) GLOB '20[0-9][0-9]-[0-1][0-9]'`
 	var args []interface{}
 	if category != "" {
-		query += ` AND relpath LIKE ? || '/%'`
+		query += ` AND vpath LIKE ? || '/%'`
 		args = append(args, category)
 	}
 	if len(group) > 0 && group[0] != "" {
-		query += ` AND folder_group(relpath) = ?`
+		query += ` AND folder_group(vpath) = ?`
 		args = append(args, group[0])
 	}
 	query += " ORDER BY 1 DESC"

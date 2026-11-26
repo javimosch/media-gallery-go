@@ -16,7 +16,7 @@ const ThumbGrid = {
             <div v-for="(file, i) in files" :key="file.sha256 + file.relpath"
                  class="thumb-item"
                  @click="$emit('open-file', file)">
-                <img :src="'/api/thumb/' + file.sha256 + '?v=4'"
+                <img :src="'/api/thumb/' + file.sha256 + '?v=5'"
                      :alt="file.relpath"
                      loading="lazy"
                      decoding="async"

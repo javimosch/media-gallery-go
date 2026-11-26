@@ -18,7 +18,7 @@ const GalleryView = {
                    placeholder="Search by filename, e.g. IMG_20260101" @input="onNameInput">
             <p v-if="nameQuery.trim() && !loading && !failed" class="head-note">
                 Searching {{ group || 'the whole gallery' }}, junk included.
-                <span v-if="category || yearMonth || !showPhotos || !showVideos || hasFace">Other filters are on, clear them to search all of it.</span>
+                <span v-if="category || yearMonth || !showPhotos || !showVideos || hasFace || assignedOnly">Other filters are on, clear them to search all of it.</span>
             </p>
             <div class="head-row">
                 <span class="head-label">Folder</span>
@@ -59,6 +59,10 @@ const GalleryView = {
                     <input type="checkbox" v-model="hasFace" @change="resetAndLoad" />
                     <span>Has face</span>
                 </label>
+                <label class="junk-toggle" v-if="hasAssignments">
+                    <input type="checkbox" v-model="assignedOnly" @change="resetAndLoad" />
+                    <span>Backfill pilot only</span>
+                </label>
             </div>
         </div>
         <thumb-grid
@@ -87,6 +91,8 @@ const GalleryView = {
 
         const GROUP_KEY = 'mg.group';
         const groups = Vue.ref([]);
+        const hasAssignments = Vue.ref(false);
+        const assignedOnly = Vue.ref(false);
         const group = Vue.ref('');
         const allCount = Vue.ref(0);
 
@@ -138,6 +144,7 @@ const GalleryView = {
                 categories.value = data.categories || [];
                 groups.value = data.groups || [];
                 allCount.value = data.total || 0;
+                hasAssignments.value = !!data.has_assignments;
             } catch (e) {}
         }
 
@@ -184,6 +191,7 @@ const GalleryView = {
                 if (!showVideos.value) url += '&videos=0';
                 url += showJunk.value ? '&junk=only' : '&hide_junk=1';
                 if (hasFace.value) url += '&has_face=1';
+                if (assignedOnly.value) url += '&assigned=only';
                 const data = await fetchJSON(url);
                 if (gen !== generation) return;
                 total.value = data.total || 0;
@@ -258,7 +266,7 @@ const GalleryView = {
             }
         }, { deep: false });
 
-        return { groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
+        return { hasAssignments, assignedOnly, groups, group, allCount, folders, folderLabel, accentStyle, setGroup, files, loading, hasMore, category, yearMonth, categories, yearMonths, showPhotos, showVideos, showJunk, nameQuery, total, failed, onNameInput, hasFace,
                  loadMore, setCategory, setYearMonth, resetAndLoad, openFile, formatYM };
     }
 };

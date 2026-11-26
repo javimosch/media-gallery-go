@@ -86,6 +86,7 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
 		Name:       strings.TrimSpace(r.URL.Query().Get("name")),
 		Group:      r.URL.Query().Get("group"),
+		AssignedOnly: r.URL.Query().Get("assigned") == "only",
 		JunkOnly:   r.URL.Query().Get("junk") == "only",
 		HidePhotos: r.URL.Query().Get("photos") == "0",
 		HideVideos: r.URL.Query().Get("videos") == "0",
@@ -170,7 +171,7 @@ func (g *GalleryHandler) handleCategories(w http.ResponseWriter, r *http.Request
 		sendError(w, err.Error(), 500)
 		return
 	}
-	resp := map[string]interface{}{"categories": cats}
+	resp := map[string]interface{}{"categories": cats, "has_assignments": g.db.hasAssignments}
 	if len(groupRules) > 0 {
 		counts, err := g.db.FolderCounts()
 		if err != nil {
@@ -253,7 +254,7 @@ func (g *GalleryHandler) handleThumb(w http.ResponseWriter, r *http.Request) {
 
 	fullPath := filepath.Join(g.mediaRoot, file.RelPath)
 	if _, statErr := os.Stat(fullPath); statErr == nil {
-		data, err := g.thumbs.Get(sha, g.thumbSource(sha, fullPath))
+		data, err := g.thumbs.Get(sha, g.thumbSource(sha, fullPath), g.db.IsAssigned(sha))
 		if err != nil {
 			// Don't cache errors — browser will retry on next view
 			w.Header().Set("Content-Type", "image/jpeg")

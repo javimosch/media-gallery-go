@@ -83,8 +83,8 @@ type FolderGroup struct {
 // FolderCounts returns visible file counts per top-level folder ("" = files
 // outside any folder).
 func (d *DB) FolderCounts() ([]FolderCount, error) {
-	rows, err := d.conn.Query(`SELECT substr(relpath, 1, max(instr(relpath, '/') - 1, 0)), COUNT(*)
-		FROM files WHERE visible(relpath) GROUP BY 1 ORDER BY 1`)
+	rows, err := d.conn.Query(`SELECT substr(vpath, 1, max(instr(vpath, '/') - 1, 0)), COUNT(*)
+		FROM ` + d.items + ` WHERE visible(relpath) AND shown GROUP BY 1 ORDER BY 1`)
 	if err != nil {
 		return nil, err
 	}
