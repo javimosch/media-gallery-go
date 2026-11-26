@@ -84,6 +84,7 @@ func (g *GalleryHandler) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	hasFace := r.URL.Query().Get("has_face") == "1"
 
 	result, err := g.db.Browse(category, yearMonth, cursor, limit, hideJunk, hasFace, g.faceDB, MediaFilter{
+		Name:       strings.TrimSpace(r.URL.Query().Get("name")),
 		JunkOnly:   r.URL.Query().Get("junk") == "only",
 		HidePhotos: r.URL.Query().Get("photos") == "0",
 		HideVideos: r.URL.Query().Get("videos") == "0",

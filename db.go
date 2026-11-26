@@ -75,6 +75,9 @@ type MediaFilter struct {
 	HidePhotos bool
 	HideVideos bool
 	JunkOnly   bool // list only what the junk filter would hide
+	// Name keeps files whose filename (not folder) contains it, ignoring case.
+	// A name search also covers junk, so an existing file is never reported missing.
+	Name string
 }
 
 var (
@@ -132,6 +135,13 @@ func (d *DB) Browse(category, yearMonth, cursor string, limit int, hideJunk bool
 	}
 
 	junkOnly := len(media) > 0 && media[0].JunkOnly
+	if len(media) > 0 && media[0].Name != "" {
+		// The filename is relpath minus everything up to the last '/'. instr, not
+		// LIKE, so '_' and '%' are literal.
+		conditions = append(conditions, "instr(lower(replace(relpath, rtrim(relpath, replace(relpath, '/', '')), '')), lower(?)) > 0")
+		args = append(args, media[0].Name)
+		hideJunk, junkOnly = false, false
+	}
 	if hideJunk || junkOnly {
 		keep := `(
 			NOT (lower(relpath) LIKE '%.jpg' OR lower(relpath) LIKE '%.jpeg' OR lower(relpath) LIKE '%.png'

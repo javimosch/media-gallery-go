@@ -3,6 +3,7 @@ const ThumbGrid = {
         files: Array,
         loading: Boolean,
         hasMore: Boolean,
+        showNames: Boolean,
     },
     emits: ['load-more', 'open-file'],
     template: `
@@ -21,6 +22,7 @@ const ThumbGrid = {
                      decoding="async"
                      draggable="false"
                      @error="onImgError">
+                <span v-if="showNames" class="name-caption" :title="file.relpath">{{ file.relpath.split('/').pop() }}</span>
                 <span v-if="isVideo(file.relpath)" class="video-badge">
                     <i data-lucide="play" class="w-3 h-3"></i>
                 </span>
